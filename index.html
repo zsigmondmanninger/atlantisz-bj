@@ -1,0 +1,1571 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Atlantisz BlackJack</title>
+<meta name="description" content="Blackjack gyakorló: játssz, tanuld az alapstratégiát, és szimuláld a hosszú távú eredményt.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Atlantisz BlackJack">
+<meta property="og:description" content="Blackjack gyakorló: játssz, tanuld az alapstratégiát, és szimuláld a hosszú távú eredményt.">
+<meta name="theme-color" content="#0a2329">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: egy mélytengeri kártyaasztal — fejléc és fülek felül, alatta a kiválasztott nézet. Szándékosan egyetlen sötét világ (filc + sárgaréz). */
+:root {
+  --abyss: #08171c;
+  --abyss-2: #0d2128;
+  --felt: #0e3a44;
+  --felt-2: #12505c;
+  --brass: #d4ab5c;
+  --brass-dim: #8a7040;
+  --pearl: #ecf0ea;
+  --mist: #9fb7b8;
+  --line: rgba(212,171,92,.22);
+  --line-soft: rgba(236,240,234,.10);
+  --card: #fbfaf5;
+  --card-ink: #16191b;
+  --card-red: #c0283a;
+  --hit: #d46a5e;
+  --stand: #e4c564;
+  --dbl: #5dbf8b;
+  --split: #72a9e6;
+  --good: #6fd19a;
+  --bad: #ef7f72;
+  --push: #b9c7c6;
+  --f-display: "Marcellus", "Cinzel", Georgia, "Times New Roman", serif;
+  --f-body: "Manrope", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --cw: clamp(38px, 9vw, 58px);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--abyss); color: var(--pearl); }
+body { font-family: var(--f-body); font-size: 15px; line-height: 1.5; min-height: 100%; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--abyss); }
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 400; text-wrap: balance; margin: 0; letter-spacing: .01em; }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--mist); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* header */
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: rgba(8,23,28,.94); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.topbar { display: flex; align-items: center; gap: 12px; padding-block: 10px; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand svg { width: 40px; height: 40px; flex: none; }
+.brand h1 { font-size: 1.35rem; color: var(--pearl); white-space: nowrap; }
+.brand h1 span { color: var(--brass); }
+.balance-pill { margin-left: auto; display: flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: .85rem; white-space: nowrap; }
+.balance-pill b { color: var(--brass); font-family: var(--f-mono); font-weight: 600; }
+nav.tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding-bottom: 8px; }
+nav.tabs::-webkit-scrollbar { display: none; }
+nav.tabs a { flex: none; text-decoration: none; color: var(--mist); padding: 7px 13px; border-radius: 999px; font-weight: 600; font-size: .9rem; border: 1px solid transparent; }
+nav.tabs a:hover { color: var(--pearl); }
+nav.tabs a[aria-current="page"] { color: var(--abyss); background: var(--brass); }
+
+main { padding-block: 18px 48px; }
+.view[hidden] { display: none !important; }
+.eyebrow { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--brass); font-weight: 700; }
+.section-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 16px; margin-bottom: 14px; }
+.section-head h2 { font-size: 1.7rem; }
+.panel { background: var(--abyss-2); border: 1px solid var(--line-soft); border-radius: 14px; padding: 16px; min-width: 0; }
+.panel h3 { font-size: 1.15rem; margin-bottom: 8px; }
+
+/* ===== TABLE (game) ===== */
+.game-grid { display: grid; grid-template-columns: minmax(0,1fr) 280px; gap: 16px; align-items: start; }
+@media (max-width: 880px) { .game-grid { grid-template-columns: minmax(0,1fr); } }
+.felt { position: relative; border-radius: 22px 22px 120px 120px / 22px 22px 60px 60px; background:
+  radial-gradient(120% 90% at 50% 0%, var(--felt-2), var(--felt) 60%, #0a2c34 100%);
+  border: 10px solid #2a1c10; box-shadow: inset 0 0 0 2px var(--brass-dim), 0 18px 40px rgba(0,0,0,.45);
+  padding: 16px 14px 22px; min-height: 420px; display: flex; flex-direction: column; gap: 14px; }
+.felt-legend { text-align: center; font-family: var(--f-display); color: rgba(212,171,92,.55); font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; line-height: 1.6; }
+.felt-legend b { display: block; color: rgba(212,171,92,.8); font-size: 1rem; font-weight: 400; letter-spacing: .2em; }
+.dealer-zone { display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 140px; }
+.zone-label { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--mist); font-weight: 700; }
+.shoe-info { position: absolute; top: 12px; right: 14px; font-size: .72rem; color: var(--mist); text-align: right; line-height: 1.3; }
+.shoe-bar { width: 70px; height: 5px; background: rgba(0,0,0,.35); border-radius: 3px; overflow: hidden; margin-top: 4px; margin-left: auto; }
+.shoe-bar i { display: block; height: 100%; background: var(--brass); }
+.seats { display: flex; flex-direction: row-reverse; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: auto; }
+.seat { flex: 1 1 120px; max-width: 200px; min-width: 104px; border: 1px dashed rgba(236,240,234,.18); border-radius: 14px; padding: 8px 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; background: rgba(0,0,0,.12); }
+.seat.me { border: 1.5px solid var(--brass); background: rgba(212,171,92,.07); flex-basis: 170px; max-width: 260px; }
+.seat-name { font-size: .74rem; font-weight: 700; color: var(--mist); text-align: center; line-height: 1.25; }
+.seat.me .seat-name { color: var(--brass); }
+.seat-net { font-family: var(--f-mono); font-size: .7rem; color: var(--mist); }
+.hands { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.hand { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px; border-radius: 10px; border: 1.5px solid transparent; }
+.hand.active { border-color: var(--brass); background: rgba(212,171,92,.1); }
+.cards { display: flex; min-height: calc(var(--cw) * 1.4); }
+.seat:not(.me) { --cw: clamp(28px, 6.5vw, 40px); }
+.dealer-zone { --cw: clamp(44px, 10vw, 64px); }
+.card { width: var(--cw); aspect-ratio: 5 / 7; background: var(--card); color: var(--card-ink); border-radius: calc(var(--cw) * .1); position: relative; box-shadow: 0 2px 6px rgba(0,0,0,.35), inset 0 0 0 1px rgba(0,0,0,.08); flex: none; font-family: var(--f-display); }
+.card + .card { margin-left: calc(var(--cw) * -0.52); }
+.card.red { color: var(--card-red); }
+.card .cr { position: absolute; top: 4%; left: 8%; font-size: calc(var(--cw) * .34); line-height: 1; text-align: center; }
+.card .cr small { display: block; font-size: calc(var(--cw) * .26); }
+.card .cc { position: absolute; inset: 0; display: grid; place-items: center; font-size: calc(var(--cw) * .5); padding-top: 18%; padding-left: 14%; }
+.card .cc.face { font-size: calc(var(--cw) * .46); }
+.card.deal-in { animation: dealIn .32s ease-out; }
+@keyframes dealIn { from { transform: translate(40px,-60px) rotate(-8deg); opacity: 0; } to { transform: none; opacity: 1; } }
+.slot { width: var(--cw); aspect-ratio: 5/7; border: 1.5px dashed rgba(212,171,92,.35); border-radius: calc(var(--cw) * .1); }
+.total { font-family: var(--f-mono); font-size: .78rem; padding: 1px 8px; border-radius: 999px; background: rgba(0,0,0,.4); color: var(--pearl); min-height: 1.4em; }
+.badge { font-size: .7rem; font-weight: 800; padding: 1px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .06em; }
+.badge.win { background: var(--good); color: #062014; }
+.badge.lose { background: var(--bad); color: #2a0905; }
+.badge.push { background: var(--push); color: #10191a; }
+.badge.bj { background: var(--brass); color: #1e1406; }
+.chip { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; font-family: var(--f-mono); font-size: .66rem; font-weight: 600; color: #fff; border: 3px dashed rgba(255,255,255,.75); box-shadow: 0 0 0 2px rgba(0,0,0,.35); }
+.chip.c5 { background: #b3413a; } .chip.c10 { background: #2f6fb3; } .chip.c25 { background: #2f8c56; } .chip.c50 { background: #d97d26; } .chip.c100 { background: #1e1e22; }
+.bet-tag { font-family: var(--f-mono); font-size: .72rem; color: var(--brass); }
+
+.controls { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.status-line { min-height: 1.6em; text-align: center; font-weight: 600; }
+.btnrow { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.btn { border: 1px solid var(--line); background: var(--abyss-2); color: var(--pearl); border-radius: 12px; padding: 10px 16px; font-weight: 700; display: inline-flex; flex-direction: column; align-items: center; line-height: 1.15; min-width: 84px; }
+.btn small { font-weight: 500; font-size: .7rem; color: var(--mist); }
+.btn:hover:not(:disabled) { border-color: var(--brass); }
+.btn:disabled { opacity: .35; cursor: not-allowed; }
+.btn.primary { background: var(--brass); color: #1b1305; border-color: var(--brass); }
+.btn.primary small { color: #4a3a17; }
+.btn.act-H { border-color: var(--hit); } .btn.act-S { border-color: var(--stand); } .btn.act-D { border-color: var(--dbl); } .btn.act-P { border-color: var(--split); }
+.btn.ghost { background: transparent; }
+.btn.sm { padding: 6px 10px; min-width: 0; font-size: .85rem; }
+.chipbtn { background: none; border: 0; padding: 0; border-radius: 50%; }
+.chipbtn .chip { width: 44px; height: 44px; font-size: .8rem; }
+.chipbtn:hover .chip { transform: translateY(-2px); }
+.coach { border: 1px solid var(--brass); background: rgba(212,171,92,.08); border-radius: 12px; padding: 12px 14px; }
+.coach p { margin: 0 0 8px; }
+.evlist { display: grid; gap: 4px; margin: 6px 0 10px; }
+.evrow { display: grid; grid-template-columns: 92px minmax(0,1fr) 64px; align-items: center; gap: 8px; font-size: .85rem; }
+.evrow .bar { height: 10px; background: rgba(255,255,255,.06); border-radius: 4px; position: relative; overflow: hidden; }
+.evrow .bar i { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+.evrow.best { font-weight: 800; }
+.evrow .v { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.side { display: flex; flex-direction: column; gap: 14px; }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: .9rem; }
+.kv dt { color: var(--mist); } .kv dd { margin: 0; text-align: right; font-family: var(--f-mono); }
+.mistakes { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: .83rem; }
+.mistakes li { border-left: 3px solid var(--bad); padding-left: 8px; }
+.field { display: grid; gap: 4px; font-size: .85rem; }
+.field label { color: var(--mist); font-weight: 600; }
+select, input[type=number] { background: var(--abyss); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; width: 100%; }
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--pearl); color: var(--abyss); padding: 10px 16px; border-radius: 12px; font-weight: 700; z-index: 50; box-shadow: 0 10px 30px rgba(0,0,0,.5); max-width: calc(100% - 32px); text-align: center; }
+.kbd { font-family: var(--f-mono); font-size: .72rem; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; color: var(--mist); }
+.newbie { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: .9rem; }
+.newbie a { color: var(--brass); font-weight: 700; }
+
+/* ===== DRILL ===== */
+.drill-grid { display: grid; grid-template-columns: minmax(0,1.3fr) minmax(0,1fr); gap: 16px; align-items: start; }
+@media (max-width: 880px) { .drill-grid { grid-template-columns: minmax(0,1fr); } }
+.drill-felt { border-radius: 18px; background: radial-gradient(120% 100% at 50% 0%, var(--felt-2), var(--felt)); border: 1px solid var(--brass-dim); padding: 18px; display: grid; gap: 14px; justify-items: center; --cw: clamp(52px, 14vw, 76px); }
+.drill-felt .vs { font-family: var(--f-display); color: var(--brass); letter-spacing: .2em; font-size: .85rem; }
+.feedback { border-radius: 12px; padding: 12px 14px; border: 1px solid var(--line-soft); }
+.feedback.ok { border-color: var(--good); background: rgba(111,209,154,.08); }
+.feedback.no { border-color: var(--bad); background: rgba(239,127,114,.08); }
+.feedback h3 { font-size: 1.1rem; margin-bottom: 4px; }
+.feedback p { margin: 4px 0; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 5px 12px; font-size: .82rem; font-weight: 600; color: var(--mist); }
+.seg button[aria-pressed="true"] { background: var(--pearl); color: var(--abyss); border-color: var(--pearl); }
+.statrow { display: flex; flex-wrap: wrap; gap: 10px 22px; }
+.stat b { display: block; font-family: var(--f-mono); font-size: 1.35rem; color: var(--pearl); font-weight: 600; }
+.stat span { font-size: .75rem; color: var(--mist); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+
+/* ===== CHART ===== */
+.rules-line { font-size: .85rem; color: var(--mist); }
+.chart-tabs { margin-bottom: 12px; }
+.chart-wrap { display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: 16px; align-items: start; }
+@media (max-width: 960px) { .chart-wrap { grid-template-columns: minmax(0,1fr); } }
+.tscroll { overflow-x: auto; }
+table.strat { border-collapse: separate; border-spacing: 2px; font-family: var(--f-mono); font-size: .82rem; margin: 0 auto; }
+table.strat th { font-weight: 600; color: var(--mist); padding: 4px 6px; font-size: .78rem; }
+table.strat thead th { color: var(--brass); }
+table.strat th.rowh { text-align: right; white-space: nowrap; color: var(--pearl); }
+table.strat td { padding: 0; }
+table.strat td button { width: 36px; height: 30px; border: 0; border-radius: 5px; font-family: var(--f-mono); font-weight: 600; font-size: .8rem; color: #13181a; position: relative; }
+table.strat td button.sel { outline: 2px solid var(--pearl); outline-offset: 1px; }
+table.strat td button.diff::after { content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: #13181a; box-shadow: 0 0 0 1.5px var(--card); }
+.c-H { background: var(--hit); } .c-S { background: var(--stand); } .c-D { background: var(--dbl); } .c-Ds { background: repeating-linear-gradient(135deg, var(--dbl) 0 6px, var(--stand) 6px 12px); } .c-P { background: var(--split); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: .82rem; margin-top: 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 18px; height: 14px; border-radius: 3px; display: inline-block; }
+.legend i.dot { width: 14px; height: 14px; background: var(--card); position: relative; border-radius: 3px; }
+.legend i.dot::after { content:""; position:absolute; top:2px; right:2px; width:6px; height:6px; border-radius:50%; background:#13181a; }
+
+/* ===== LEARN ===== */
+.learn { display: grid; grid-template-columns: 220px minmax(0,1fr); gap: 24px; align-items: start; }
+@media (max-width: 880px) { .learn { grid-template-columns: minmax(0,1fr); } .toc { position: static !important; } }
+.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 110px); display: grid; gap: 2px; font-size: .88rem; }
+.toc a { color: var(--mist); text-decoration: none; padding: 5px 10px; border-left: 2px solid var(--line-soft); }
+.toc a:hover { color: var(--pearl); border-left-color: var(--brass); }
+.lesson { max-width: 70ch; padding-bottom: 26px; margin-bottom: 26px; border-bottom: 1px solid var(--line-soft); scroll-margin-top: 120px; }
+.lesson h2 { font-size: 1.55rem; margin: 4px 0 10px; }
+.lesson p, .lesson li { color: #d9e1dc; }
+.lesson ul, .lesson ol { padding-left: 1.2em; display: grid; gap: 6px; }
+.lesson strong { color: var(--pearl); }
+.term { color: var(--brass); font-weight: 700; }
+.callout { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: rgba(212,171,92,.05); margin: 12px 0; }
+.mini-hand { display: inline-flex; vertical-align: middle; --cw: 30px; margin: 0 4px; }
+table.plain { border-collapse: collapse; width: 100%; font-size: .88rem; }
+table.plain th, table.plain td { padding: 7px 8px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: top; }
+table.plain th { color: var(--mist); font-weight: 700; font-size: .76rem; text-transform: uppercase; letter-spacing: .06em; }
+table.plain td.r, table.plain th.r { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.signals { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.signal { border: 1px solid var(--line-soft); border-radius: 12px; padding: 10px 12px; }
+.signal b { display: block; font-family: var(--f-display); font-weight: 400; font-size: 1.1rem; }
+
+/* ===== SIM ===== */
+.sim-grid { display: grid; grid-template-columns: 300px minmax(0,1fr); gap: 16px; align-items: start; }
+@media (max-width: 880px) { .sim-grid { grid-template-columns: minmax(0,1fr); } }
+.form { display: grid; gap: 12px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.kpi { border: 1px solid var(--line-soft); border-radius: 12px; padding: 10px 12px; }
+.kpi span { font-size: .72rem; color: var(--mist); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; display: block; }
+.kpi b { font-family: var(--f-mono); font-size: 1.3rem; font-weight: 600; display: block; margin-top: 2px; }
+.kpi small { color: var(--mist); font-size: .76rem; }
+.progress { height: 6px; background: rgba(255,255,255,.08); border-radius: 3px; overflow: hidden; }
+.progress i { display: block; height: 100%; width: 0; background: var(--brass); transition: width .1s; }
+.hist { width: 100%; height: auto; display: block; }
+.hist text { fill: var(--mist); font-family: var(--f-mono); font-size: 11px; }
+.hist .axis { stroke: rgba(236,240,234,.25); }
+.hist .grid { stroke: rgba(236,240,234,.07); }
+.tip { position: fixed; pointer-events: none; background: var(--pearl); color: var(--abyss); font-size: .8rem; padding: 6px 9px; border-radius: 8px; z-index: 60; font-weight: 600; box-shadow: 0 6px 18px rgba(0,0,0,.4); }
+.inbar { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.inbar i { display: inline-block; height: 8px; border-radius: 0 4px 4px 0; background: var(--brass); }
+tr.cur td { background: rgba(212,171,92,.08); }
+.note { font-size: .8rem; color: var(--mist); }
+
+/* ===== SETTINGS ===== */
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; align-items: start; }
+.check { display: flex; gap: 8px; align-items: center; font-size: .9rem; }
+.check input { width: 18px; height: 18px; accent-color: var(--brass); }
+
+@media (prefers-reduced-motion: reduce) { .card.deal-in { animation: none; } * { transition: none !important; } }
+@media (max-width: 520px) {
+  .brand h1 { font-size: 1.12rem; }
+  .brand svg { width: 34px; height: 34px; }
+  .btn { min-width: 70px; padding: 9px 10px; }
+  .felt { padding: 12px 8px 18px; border-width: 7px; }
+  .seat { min-width: 92px; }
+  .shoe-info { display: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand" id="brand"></div>
+      <div class="balance-pill" title="Gyakorló zseton, nem valódi pénz">Zseton <b id="topBalance" class="num">0</b></div>
+    </div>
+    <nav class="tabs" aria-label="Fő menü">
+      <a href="#jatek" data-view="jatek">Játék</a>
+      <a href="#gyakorlas" data-view="gyakorlas">Gyorsgyakorlás</a>
+      <a href="#tablazat" data-view="tablazat">Táblázat</a>
+      <a href="#tanulas" data-view="tanulas">Tanulás</a>
+      <a href="#szimulacio" data-view="szimulacio">Asztal &amp; esélyek</a>
+      <a href="#beallitasok" data-view="beallitasok">Beállítások</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- ============ JÁTÉK ============ -->
+<section class="view" id="v-jatek">
+  <div class="newbie" id="newbieBox">
+    <span>Most kezded? Olvasd el a <a href="#tanulas">Tanulás</a> fület, vagy nézd meg a <a href="#tablazat">táblázatot</a>. Az edző minden hibás döntésnél szól.</span>
+    <button class="btn sm ghost" id="hideNewbie">Rendben</button>
+  </div>
+  <div class="game-grid">
+    <div style="min-width:0">
+      <div class="felt" id="felt">
+        <div class="shoe-info" id="shoeInfo"></div>
+        <div class="dealer-zone">
+          <div class="zone-label">Osztó</div>
+          <div class="cards" id="dealerCards"></div>
+          <div class="total" id="dealerTotal"></div>
+        </div>
+        <div class="felt-legend"><b>ATLANTISZ BLACKJACK</b><span id="feltRules"></span></div>
+        <div class="seats" id="seats"></div>
+      </div>
+      <div class="controls" id="controls"></div>
+    </div>
+    <aside class="side">
+      <div class="panel">
+        <h3>Asztal</h3>
+        <div class="form">
+          <div class="field"><label for="tPlayers">Játékosok az asztalnál (veled együtt)</label>
+            <select id="tPlayers"></select></div>
+          <div class="field"><label for="tSeat">A te helyed (1. = az osztótól balra, első lapot kapja)</label>
+            <select id="tSeat"></select></div>
+          <div class="field"><label for="tOthers">A többiek így játszanak</label>
+            <select id="tOthers">
+              <option value="basic">Alapstratégia szerint</option>
+              <option value="average">Mint egy átlagos vendég</option>
+              <option value="neverbust">„Sosem sokallok be”</option>
+              <option value="mimic">Az osztót utánozzák (17-ig húznak)</option>
+            </select></div>
+          <p class="note" style="margin:0">Asztalt csak két kör között lehet változtatni.</p>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>A mai gyakorlásod</h3>
+        <dl class="kv" id="gStats"></dl>
+        <h3 style="margin-top:14px;font-size:1rem">Utolsó hibák</h3>
+        <ul class="mistakes" id="gMistakes"></ul>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ GYAKORLÁS ============ -->
+<section class="view" id="v-gyakorlas" hidden>
+  <div class="section-head">
+    <div><div class="eyebrow">Gyorsgyakorlás</div><h2>Egy kéz, egy döntés</h2></div>
+    <div class="seg" id="drillFilter" role="group" aria-label="Kezek típusa">
+      <button data-f="all" aria-pressed="true">Mind</button>
+      <button data-f="hard">Kemény</button>
+      <button data-f="soft">Puha</button>
+      <button data-f="pair">Párok</button>
+      <button data-f="hardcases">Nehéz esetek</button>
+      <button data-f="mine">A hibáim</button>
+    </div>
+  </div>
+  <div class="drill-grid">
+    <div class="drill-felt" id="drillFelt"></div>
+    <div class="side">
+      <div id="drillFeedback"></div>
+      <div class="panel">
+        <div class="statrow" id="drillStats"></div>
+        <p class="note" style="margin:10px 0 0">Billentyűk: <span class="kbd">H</span> lap, <span class="kbd">S</span> megáll, <span class="kbd">D</span> dupláz, <span class="kbd">P</span> feloszt, <span class="kbd">Enter</span> következő.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TÁBLÁZAT ============ -->
+<section class="view" id="v-tablazat" hidden>
+  <div class="section-head">
+    <div><div class="eyebrow">Alapstratégia</div><h2>Mit lépj, az osztó lapja ellen</h2>
+      <div class="rules-line" id="chartRules"></div></div>
+    <div class="seg chart-tabs" id="chartTabs" role="group" aria-label="Táblázat">
+      <button data-t="hard" aria-pressed="true">Kemény kezek</button>
+      <button data-t="soft">Puha kezek (ásszal)</button>
+      <button data-t="pair">Párok</button>
+    </div>
+  </div>
+  <div class="chart-wrap">
+    <div class="panel">
+      <div class="tscroll"><table class="strat" id="stratTable"></table></div>
+      <div class="legend">
+        <span><i class="c-H"></i>H: Lap</span>
+        <span><i class="c-S"></i>S: Megáll</span>
+        <span><i class="c-D"></i>D: Dupláz, ha nem lehet: lap</span>
+        <span><i class="c-Ds"></i>Ds: Dupláz, ha nem lehet: megáll</span>
+        <span><i class="c-P"></i>P: Feloszt</span>
+        <span><i class="dot"></i>Itt más, mint az amerikai (lefordított lapos) táblázatban</span>
+      </div>
+    </div>
+    <div class="panel" id="cellDetail"></div>
+  </div>
+</section>
+
+<!-- ============ TANULÁS ============ -->
+<section class="view" id="v-tanulas" hidden>
+  <div class="learn">
+    <nav class="toc" aria-label="Leckék">
+      <a href="#" data-goto="l-cel">A cél és a lapok</a>
+      <a href="#" data-goto="l-menet">Így megy egy kör</a>
+      <a href="#" data-goto="l-dontes">A döntéseid</a>
+      <a href="#" data-goto="l-tabla">A táblázat olvasása</a>
+      <a href="#" data-goto="l-europai">Ahol az európai szabály más</a>
+      <a href="#" data-goto="l-hibak">Gyakori hibák és az áruk</a>
+      <a href="#" data-goto="l-asztal">Számít, hányan ülnek?</a>
+      <a href="#" data-goto="l-etikett">Viselkedés az élő asztalnál</a>
+      <a href="#" data-goto="l-felelos">Felelős játék</a>
+    </nav>
+    <div id="lessons"></div>
+  </div>
+</section>
+
+<!-- ============ SZIMULÁCIÓ ============ -->
+<section class="view" id="v-szimulacio" hidden>
+  <div class="section-head">
+    <div><div class="eyebrow">Asztal &amp; esélyek</div><h2>Mi történik egy este alatt?</h2>
+      <p class="muted" style="margin:4px 0 0;max-width:70ch">A gép lejátszik több ezer estét a beállított asztalon, 6 paklis cipővel, a szabályaid szerint. Így látod, mennyi a várható eredmény, és mekkorák a kilengések, ha többen vagy kevesebben ülnek az asztalnál.</p></div>
+  </div>
+  <div class="sim-grid">
+    <div class="panel form">
+      <div class="field"><label for="sPlayers">Játékosok az asztalnál</label><select id="sPlayers"></select></div>
+      <div class="field"><label for="sSeat">A te helyed</label><select id="sSeat"></select></div>
+      <div class="field"><label for="sMine">Te így játszol</label>
+        <select id="sMine">
+          <option value="basic">Alapstratégia szerint</option>
+          <option value="average">Mint egy átlagos vendég</option>
+          <option value="neverbust">„Sosem sokallok be”</option>
+          <option value="mimic">Az osztót utánzom</option>
+        </select></div>
+      <div class="field"><label for="sOthers">A többiek így játszanak</label>
+        <select id="sOthers">
+          <option value="basic">Alapstratégia szerint</option>
+          <option value="average" selected>Mint egy átlagos vendég</option>
+          <option value="neverbust">„Sosem sokallok be”</option>
+          <option value="mimic">Az osztót utánozzák</option>
+        </select></div>
+      <div class="field"><label for="sBet">Tét kezenként (Ft)</label><input type="number" id="sBet" min="100" step="100" value="2000"></div>
+      <div class="field"><label for="sHours">Egy este hossza (óra)</label>
+        <select id="sHours"><option value="1">1 óra</option><option value="2" selected>2 óra</option><option value="3">3 óra</option><option value="4">4 óra</option></select></div>
+      <div class="field"><label for="sSessions">Hány estét játsszon le</label>
+        <select id="sSessions"><option value="500">500</option><option value="2000" selected>2000</option><option value="5000">5000 (lassabb)</option></select></div>
+      <button class="btn primary" id="sRun">Lejátszás<small>szimuláció indítása</small></button>
+      <div class="progress" aria-hidden="true"><i id="sProg"></i></div>
+    </div>
+    <div class="side" style="min-width:0">
+      <div class="panel">
+        <div class="kpis" id="sKpis"></div>
+      </div>
+      <div class="panel">
+        <h3 id="histTitle">Esték eredménye</h3>
+        <p class="note" id="histNote" style="margin:0 0 6px"></p>
+        <div id="histWrap"></div>
+      </div>
+      <div class="panel">
+        <h3>1–7 játékos összevetése</h3>
+        <p class="note" style="margin:0 0 8px" id="cmpNote"></p>
+        <div class="tscroll"><table class="plain" id="cmpTable"></table></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ BEÁLLÍTÁSOK ============ -->
+<section class="view" id="v-beallitasok" hidden>
+  <div class="section-head"><div><div class="eyebrow">Beállítások</div><h2>Asztali szabályok és edző</h2></div></div>
+  <div class="settings-grid">
+    <div class="panel form">
+      <h3>Szabályok</h3>
+      <div class="field"><label for="rDbl">Duplázás</label>
+        <select id="rDbl"><option value="any">Bármely két lapra</option><option value="9-11">Csak 9, 10, 11-re</option><option value="10-11">Csak 10, 11-re</option></select></div>
+      <label class="check"><input type="checkbox" id="rDas"> Felosztás után is lehet duplázni</label>
+      <div class="field"><label for="rH17">Az osztó puha 17-nél</label>
+        <select id="rH17"><option value="s17">Megáll (minden 17-nél megáll)</option><option value="h17">Húz</option></select></div>
+      <div class="field"><label for="rDbj">Ha az osztó a végén blackjacket kap</label>
+        <select id="rDbj"><option value="all">Mindent elveszítek (duplázás, felosztás is)</option><option value="obo">Csak az eredeti tétet veszítem</option></select></div>
+      <div class="field"><label for="rBj">A blackjack fizetése</label>
+        <select id="rBj"><option value="1.5">3:2 (10 tétre 15)</option><option value="1.2">6:5 (10 tétre 12)</option></select></div>
+      <div class="field"><label for="rMax">Legfeljebb ennyi kézre lehet felosztani</label>
+        <select id="rMax"><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
+      <p class="note" style="margin:0">Fix: 6 pakli (312 lap), lefordított lap nincs, ászokra felosztás után 1-1 lap, ászt nem lehet újra felosztani, megadás (surrender) nincs.</p>
+    </div>
+    <div class="panel form">
+      <h3>Edző és játék</h3>
+      <div class="field"><label for="pCoach">Edző</label>
+        <select id="pCoach"><option value="warn">Hibánál szól, és újra dönthetsz</option><option value="after">Csak utólag jelez</option><option value="off">Kikapcsolva</option></select></div>
+      <div class="field"><label for="pSpeed">Osztás sebessége</label>
+        <select id="pSpeed"><option value="slow">Lassú</option><option value="normal">Normál</option><option value="fast">Gyors</option></select></div>
+      <div class="field"><label for="pBank">Kezdő zseton</label><input type="number" id="pBank" min="100" step="100"></div>
+      <div class="btnrow" style="justify-content:flex-start">
+        <button class="btn sm" id="resetChips">Zseton visszaállítása</button>
+        <button class="btn sm" id="resetStats">Statisztika törlése</button>
+      </div>
+      <p class="note" style="margin:0">A beállítások és az eredményeid csak ezen az eszközön, ebben a böngészőben maradnak meg.</p>
+    </div>
+    <div class="panel">
+      <h3>Elméleti ház előnye ezekkel a szabályokkal</h3>
+      <p style="margin:0 0 6px"><b class="num" id="edgeNow" style="font-size:1.6rem;color:var(--brass)"></b></p>
+      <p class="note" style="margin:0" id="edgeNote"></p>
+    </div>
+  </div>
+</section>
+</main>
+<div class="toast" id="toast" hidden></div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+(() => {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('akbj:' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('akbj:' + k, JSON.stringify(v)); } catch (e) {} }
+};
+const fmt = (x, d = 0) => x.toLocaleString('hu-HU', { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = (x, d = 2) => (x >= 0 ? '+' : '−') + fmt(Math.abs(x * 100), d) + '%';
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------------- ICON ---------------- */
+const ICON_SVG = `<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Atlantisz BlackJack ikon: egy ász és egy király">
+<rect x="3" y="3" width="114" height="114" rx="26" fill="#0e3a44" stroke="#d4ab5c" stroke-width="4"/>
+<circle cx="60" cy="60" r="44" fill="none" stroke="#d4ab5c" stroke-opacity=".25" stroke-width="1.5"/>
+<g transform="rotate(-14 44 64)"><rect x="20" y="28" width="48" height="68" rx="6" fill="#fbfaf5" stroke="#16191b" stroke-opacity=".25"/>
+<text x="27" y="46" font-family="Georgia,serif" font-size="17" font-weight="700" fill="#c0283a">K</text>
+<text x="27.5" y="58" font-family="Georgia,serif" font-size="12" fill="#c0283a">♥</text>
+<text x="47" y="84" text-anchor="middle" font-family="Georgia,serif" font-size="28" fill="#c0283a">♥</text></g>
+<g transform="rotate(12 76 64)"><rect x="52" y="28" width="48" height="68" rx="6" fill="#fbfaf5" stroke="#16191b" stroke-opacity=".25"/>
+<text x="59" y="46" font-family="Georgia,serif" font-size="17" font-weight="700" fill="#16191b">A</text>
+<text x="59.5" y="58" font-family="Georgia,serif" font-size="12" fill="#16191b">♠</text>
+<text x="79" y="86" text-anchor="middle" font-family="Georgia,serif" font-size="32" fill="#16191b">♠</text></g>
+</svg>`;
+$('#brand').innerHTML = ICON_SVG + '<h1>Atlantisz <span>BlackJack</span></h1>';
+(function installIcons() {
+  try {
+    const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(ICON_SVG);
+    const fav = document.createElement('link'); fav.rel = 'icon'; fav.type = 'image/svg+xml'; fav.href = svgUrl; document.head.appendChild(fav);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const mk = size => { const c = document.createElement('canvas'); c.width = c.height = size; const x = c.getContext('2d'); x.fillStyle = '#0e3a44'; x.fillRect(0, 0, size, size); x.drawImage(img, 0, 0, size, size); return c.toDataURL('image/png'); };
+        const p180 = mk(180), p512 = mk(512);
+        const at = document.createElement('link'); at.rel = 'apple-touch-icon'; at.href = p180; document.head.appendChild(at);
+        const base = location.href.split('#')[0];
+        const man = { name: 'Atlantisz BlackJack', short_name: 'Atlantisz BJ', start_url: base, display: 'standalone', background_color: '#08171c', theme_color: '#0a2329',
+          icons: [{ src: p180, sizes: '180x180', type: 'image/png' }, { src: p512, sizes: '512x512', type: 'image/png' }] };
+        const ml = document.createElement('link'); ml.rel = 'manifest'; ml.href = 'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(man)); document.head.appendChild(ml);
+        const am = document.createElement('meta'); am.name = 'apple-mobile-web-app-title'; am.content = 'Atlantisz BJ'; document.head.appendChild(am);
+      } catch (e) {}
+    };
+    img.src = svgUrl;
+  } catch (e) {}
+})();
+
+/* ---------------- SETTINGS ---------------- */
+const DEF_RULES = { dbl: 'any', das: true, h17: false, dbj: 'all', bjPay: 1.5, maxHands: 4 };
+const DEF_PREFS = { players: 3, seat: 2, others: 'average', coach: 'warn', speed: 'normal', bankroll: 1000, newbieHidden: false };
+let rules = Object.assign({}, DEF_RULES, store.get('rules', {}));
+let prefs = Object.assign({}, DEF_PREFS, store.get('prefs', {}));
+const saveRules = () => store.set('rules', rules);
+const savePrefs = () => store.set('prefs', prefs);
+
+/* ---------------- STRATEGY ENGINE (végtelen pakli közelítés, 6 paklira nagyon pontos) ---------------- */
+const PV_INF = [0, 1/13, 1/13, 1/13, 1/13, 1/13, 1/13, 1/13, 1/13, 1/13, 4/13];
+const PV = PV_INF;
+const totOf = (hard, ace) => (ace && hard + 10 <= 21) ? hard + 10 : hard;
+const softOf = (hard, ace) => ace && hard + 10 <= 21;
+const UPNAME = v => v === 1 ? 'Á' : String(v);
+const POSS = v => ({ 1: 'ásza', 2: '2-ese', 3: '3-asa', 4: '4-ese', 5: '5-öse', 6: '6-osa', 7: '7-ese', 8: '8-asa', 9: '9-ese', 10: '10-ese' })[v];
+const ACT = { H: 'Lap', S: 'Megáll', D: 'Dupláz', P: 'Feloszt' };
+const ACT_EN = { H: 'Hit', S: 'Stand', D: 'Double', P: 'Split' };
+
+function dealerDist(up, h17, PV) {
+  const memo = new Map();
+  function rec(hard, ace, nc) {
+    const key = hard * 8 + (ace ? 4 : 0) + Math.min(nc, 3);
+    const m = memo.get(key); if (m) return m;
+    const t = totOf(hard, ace), soft = softOf(hard, ace);
+    const r = new Float64Array(7);
+    if (nc === 2 && t === 21) r[6] = 1;
+    else if (t > 21) r[5] = 1;
+    else if (t >= 17 && !(h17 && soft && t === 17)) r[t - 17] = 1;
+    else for (let v = 1; v <= 10; v++) { const s = rec(hard + v, ace || v === 1, nc + 1); for (let i = 0; i < 7; i++) r[i] += PV[v] * s[i]; }
+    memo.set(key, r); return r;
+  }
+  return rec(up, up === 1, 1);
+}
+
+// 6 paklis összetétel: a játékos két lapját és az osztó lapját kivesszük a cipőből (puha kezeknél és pároknál számít)
+function compPV(rem) {
+  const cnt = [0, 24, 24, 24, 24, 24, 24, 24, 24, 24, 96];
+  for (const v of rem) cnt[v]--;
+  const tot = cnt.reduce((a, b) => a + b, 0);
+  return cnt.map(c => c / tot);
+}
+function buildEngine(R, PV = PV_INF, onlyUp = 0) {
+  const ups = [];
+  const compCache = new Map();
+  for (let up = 1; up <= 10; up++) {
+    if (onlyUp && up !== onlyUp) continue;
+    const dd = dealerDist(up, R.h17, PV);
+    const pB = dd[6];
+    const D = new Float64Array(6); for (let i = 0; i < 6; i++) D[i] = dd[i] / (1 - pB);
+    const stand = new Float64Array(32);
+    for (let t = 0; t < 32; t++) {
+      if (t > 21) { stand[t] = -1; continue; }
+      let ev = D[5];
+      for (let i = 0; i < 5; i++) { const d = 17 + i; if (t > d) ev += D[i]; else if (t < d) ev -= D[i]; }
+      stand[t] = ev;
+    }
+    const hitM = new Map(), bestM = new Map();
+    const best = (hard, ace) => {
+      const t = totOf(hard, ace); if (t > 21) return -1;
+      const k = hard * 2 + (ace ? 1 : 0); if (bestM.has(k)) return bestM.get(k);
+      const v = Math.max(stand[t], hit(hard, ace)); bestM.set(k, v); return v;
+    };
+    const hit = (hard, ace) => {
+      const k = hard * 2 + (ace ? 1 : 0); if (hitM.has(k)) return hitM.get(k);
+      let ev = 0; for (let v = 1; v <= 10; v++) ev += PV[v] * best(hard + v, ace || v === 1);
+      hitM.set(k, ev); return ev;
+    };
+    const dbl = (hard, ace) => { let ev = 0; for (let v = 1; v <= 10; v++) ev += PV[v] * stand[totOf(hard + v, ace || v === 1)]; return 2 * ev; };
+    ups[up] = { pB, D, stand, hit, best, dbl, dd };
+  }
+  const dblAllowed = t => R.dbl === 'any' ? true : R.dbl === '9-11' ? (t >= 9 && t <= 11) : (t === 10 || t === 11);
+  const loss = (a, inSplit) => R.dbj === 'all' ? (a === 'D' ? 2 : 1) : (inSplit ? 0.5 : 1);
+  const splitMemo = new Map();
+  function splitEV(pv, up) {
+    const k = pv * 16 + up; if (splitMemo.has(k)) return splitMemo.get(k);
+    const U = ups[up], pB = U.pB;
+    let sum = 0;
+    for (let v = 1; v <= 10; v++) {
+      const hard = pv + v, ace = pv === 1 || v === 1, t = totOf(hard, ace);
+      let val;
+      if (pv === 1) val = pB * -loss('S', true) + (1 - pB) * U.stand[t];
+      else {
+        val = pB * -loss('S', true) + (1 - pB) * U.stand[t];
+        val = Math.max(val, pB * -loss('H', true) + (1 - pB) * U.hit(hard, ace));
+        if (R.das && dblAllowed(t)) val = Math.max(val, pB * -loss('D', true) + (1 - pB) * U.dbl(hard, ace));
+      }
+      sum += PV[v] * val;
+    }
+    const r = 2 * sum; splitMemo.set(k, r); return r;
+  }
+  // o: {two, pairVal, inSplit, splitAces, noDouble, noSplit}
+  function evaluate(hard, ace, up, o = {}) {
+    // két lapos puha kéz vagy pár: pontos 6 paklis összetétellel számolunk
+    if (!onlyUp && o.two !== false && !o.inSplit && (o.pairVal || softOf(hard, ace)) && hard <= 20) {
+      const a = o.pairVal ? o.pairVal : 1, b = o.pairVal ? o.pairVal : hard - 1;
+      const k = a * 1000 + b * 20 + up;
+      let ce = compCache.get(k);
+      if (!ce) { ce = buildEngine(R, compPV([a, b, up]), up); compCache.set(k, ce); }
+      return ce.evaluate(hard, ace, up, o);
+    }
+    const U = ups[up], pB = U.pB, t = totOf(hard, ace);
+    const mix = (a, ev) => pB * -loss(a, !!o.inSplit) + (1 - pB) * ev;
+    const res = { S: mix('S', U.stand[t]) };
+    if (o.splitAces) return res;
+    if (t < 21) res.H = mix('H', U.hit(hard, ace));
+    const two = o.two !== false;
+    if (two && t < 21 && !o.noDouble && dblAllowed(t) && (!o.inSplit || R.das)) res.D = mix('D', U.dbl(hard, ace));
+    if (two && o.pairVal && !o.noSplit) res.P = splitEV(o.pairVal, up);
+    return res;
+  }
+  const argmax = res => { let b = null, bv = -1e9; for (const k in res) if (res[k] > bv) { bv = res[k]; b = k; } return b; };
+  function code(hard, ace, up, pairVal) {
+    const res = evaluate(hard, ace, up, { two: true, pairVal });
+    const b = argmax(res);
+    if (b === 'D') { const alt = (res.H !== undefined && res.H > res.S) ? 'H' : 'S'; return alt === 'S' ? 'Ds' : 'D'; }
+    return b;
+  }
+  const dmemo = new Map();
+  // gyors döntés szimulációhoz és játékhoz
+  function decide(hard, ace, up, two, inSplit, pv, canSplit, canDbl) {
+    const key = (((((((hard * 2 + (ace ? 1 : 0)) * 11 + up) * 2 + (two ? 1 : 0)) * 2 + (inSplit ? 1 : 0)) * 11 + pv) * 2 + (canSplit ? 1 : 0)) * 2 + (canDbl ? 1 : 0));
+    let r = dmemo.get(key); if (r) return r;
+    r = argmax(evaluate(hard, ace, up, { two, inSplit, pairVal: canSplit ? pv : 0, noDouble: !canDbl, noSplit: !canSplit }));
+    dmemo.set(key, r); return r;
+  }
+  function houseEV() {
+    let tot = 0;
+    for (let up = 1; up <= 10; up++) {
+      const U = ups[up]; let sub = 0;
+      for (let a = 1; a <= 10; a++) for (let b = 1; b <= 10; b++) {
+        const p = PV[a] * PV[b], hard = a + b, ace = a === 1 || b === 1;
+        if (ace && hard === 11) { sub += p * (1 - U.pB) * R.bjPay; continue; }
+        const res = evaluate(hard, ace, up, { two: true, pairVal: a === b ? a : 0 });
+        sub += p * res[argmax(res)];
+      }
+      tot += PV[up] * sub;
+    }
+    return tot;
+  }
+  return { R, ups, evaluate, argmax, code, decide, houseEV, dblAllowed, splitEV };
+}
+
+let E, EUS, EDGE;
+function rebuild() {
+  E = buildEngine(rules);
+  EUS = buildEngine(Object.assign({}, rules, { dbj: 'obo' }));
+  EDGE = E.houseEV();
+}
+rebuild();
+
+/* ---------------- PLAYER STYLES ---------------- */
+// return 'H','S','D','P'
+const STYLES = {
+  basic: (hard, ace, up, two, inSplit, pv, canSplit, canDbl) => {
+    const a = E.decide(hard, ace, up, two, inSplit, pv, canSplit, canDbl); return a;
+  },
+  average: (hard, ace, up, two, inSplit, pv, canSplit, canDbl) => {
+    const t = totOf(hard, ace), soft = softOf(hard, ace);
+    if (canSplit && pv) {
+      if (pv === 1 || pv === 8) return 'P';
+      if (pv !== 10 && pv !== 5 && pv !== 4 && E.decide(hard, ace, up, two, inSplit, pv, true, canDbl) === 'P') return 'P';
+    }
+    if (soft) return t >= 18 ? 'S' : 'H';
+    if (t >= 17) return 'S';
+    if (t >= 13) return (up >= 7 || up === 1) ? (t >= 15 ? 'S' : 'H') : 'S';
+    if (t === 12) return (up >= 2 && up <= 6) ? 'S' : 'H';
+    if (t === 11) return canDbl ? 'D' : 'H';
+    if (t === 10) return (canDbl && up >= 2 && up <= 9) ? 'D' : 'H';
+    return 'H';
+  },
+  neverbust: (hard, ace) => { const t = totOf(hard, ace); return softOf(hard, ace) ? (t >= 18 ? 'S' : 'H') : (t >= 12 ? 'S' : 'H'); },
+  mimic: (hard, ace) => { const t = totOf(hard, ace), s = softOf(hard, ace); if (t < 17) return 'H'; if (rules.h17 && s && t === 17) return 'H'; return 'S'; }
+};
+const STYLE_NAME = { basic: 'alapstratégia', average: 'átlagos vendég', neverbust: 'sosem sokall be', mimic: 'osztót utánozza' };
+// becsült kezek óránként élő asztalnál (játékosszám szerint)
+const HPH = [0, 200, 140, 105, 85, 70, 60, 50];
+
+/* ---------------- SIMULATOR ---------------- */
+function makeSim(cfg) {
+  const shoe = new Uint8Array(312);
+  { let i = 0; for (let d = 0; d < 6; d++) { for (let v = 1; v <= 9; v++) for (let k = 0; k < 4; k++) shoe[i++] = v; for (let k = 0; k < 16; k++) shoe[i++] = 10; } }
+  let pos = 312, cut = 0;
+  const shuffle = () => { for (let i = 311; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; const t = shoe[i]; shoe[i] = shoe[j]; shoe[j] = t; } pos = 0; cut = 312 - Math.floor(312 * (0.22 + Math.random() * 0.06)); };
+  const draw = () => { if (pos >= 312) shuffle(); return shoe[pos++]; };
+  const n = cfg.players, me = cfg.seat - 1;
+  const myStyle = STYLES[cfg.mine], otherStyle = STYLES[cfg.others];
+  const c1 = new Uint8Array(n), c2 = new Uint8Array(n);
+  const maxH = rules.maxHands, das = rules.das, dbjAll = rules.dbj === 'all', bjPay = rules.bjPay, h17 = rules.h17;
+  const st = { rounds: 0, net: 0, sq: 0, win: 0, lose: 0, push: 0, bj: 0, bust: 0 };
+  function playSeat(style, a, b, up) {
+    if ((a === 1 || b === 1) && a + b === 11) return [{ nat: true, bet: 1, t: 21, bust: false }];
+    const list = [{ hard: a + b, ace: a === 1 || b === 1, n: 2, pv: a === b ? a : 0, bet: 1, split: false, sa: false, orig: 0 }];
+    for (let i = 0; i < list.length; i++) {
+      const h = list[i];
+      if (h.n === 1) { const c = draw(); h.hard += c; h.ace = h.ace || c === 1; h.n = 2; h.pv = (c === h.orig && h.orig !== 1) ? c : 0; if (h.orig === 1 && c === 1) h.pv = 0; }
+      for (;;) {
+        const t = totOf(h.hard, h.ace);
+        if (t > 21) { h.bust = true; break; }
+        if (h.sa || t === 21) break;
+        const two = h.n === 2;
+        const canSplit = two && h.pv > 0 && list.length < maxH;
+        const canDbl = two && E.dblAllowed(t) && (!h.split || das);
+        let act = style(h.hard, h.ace, up, two, h.split, h.pv, canSplit, canDbl);
+        if (act === 'P' && !canSplit) act = 'H';
+        if (act === 'D' && !canDbl) act = E.decide(h.hard, h.ace, up, false, h.split, 0, false, false);
+        if (act === 'P') {
+          const pv = h.pv; const c = draw();
+          h.hard = pv + c; h.ace = pv === 1 || c === 1; h.n = 2; h.split = true; h.sa = pv === 1; h.pv = (c === pv && pv !== 1) ? pv : 0;
+          list.splice(i + 1, 0, { hard: pv, ace: pv === 1, n: 1, pv: 0, bet: 1, split: true, sa: pv === 1, orig: pv });
+          continue;
+        }
+        if (act === 'D') { h.bet = 2; const c = draw(); h.hard += c; h.ace = h.ace || c === 1; h.n++; if (totOf(h.hard, h.ace) > 21) h.bust = true; break; }
+        if (act === 'H') { const c = draw(); h.hard += c; h.ace = h.ace || c === 1; h.n++; continue; }
+        break;
+      }
+      h.t = totOf(h.hard, h.ace);
+    }
+    return list;
+  }
+  function round() {
+    if (pos >= cut) shuffle();
+    for (let s = 0; s < n; s++) c1[s] = draw();
+    const up = draw();
+    for (let s = 0; s < n; s++) c2[s] = draw();
+    const seats = [];
+    let live = false, nat = false;
+    for (let s = 0; s < n; s++) {
+      const hs = playSeat(s === me ? myStyle : otherStyle, c1[s], c2[s], up);
+      seats.push(hs);
+      for (const h of hs) { if (h.nat) nat = true; else if (!h.bust) live = true; }
+    }
+    let dh = up, da = up === 1, dn = 1, dBJ = false, dt = 0;
+    if (live) {
+      for (;;) { const c = draw(); dh += c; da = da || c === 1; dn++; const t = totOf(dh, da); if (dn === 2 && t === 21) { dBJ = true; break; } if (t > 21) break; if (t >= 17 && !(h17 && softOf(dh, da) && t === 17)) break; }
+    } else if (nat && (up === 1 || up === 10)) { const c = draw(); dh += c; da = da || c === 1; dn = 2; if (totOf(dh, da) === 21) dBJ = true; }
+    dt = totOf(dh, da);
+    // settle me
+    const hs = seats[me]; let net = 0;
+    if (dBJ) {
+      if (hs[0].nat) net = 0;
+      else if (dbjAll) { for (const h of hs) net -= h.bet; }
+      else net = -1;
+    } else {
+      for (const h of hs) {
+        if (h.nat) { net += bjPay; continue; }
+        if (h.bust) { net -= h.bet; st.bust++; continue; }
+        if (dt > 21 || h.t > dt) net += h.bet; else if (h.t < dt) net -= h.bet;
+      }
+    }
+    if (hs[0].nat && !dBJ) st.bj++;
+    if (net > 0) st.win++; else if (net < 0) st.lose++; else st.push++;
+    st.rounds++; st.net += net; st.sq += net * net;
+    return net;
+  }
+  shuffle();
+  return { round, st };
+}
+
+/* ---------------- DOM CARD ---------------- */
+const SUITS = ['♠', '♥', '♦', '♣'];
+const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+const rankVal = r => r === 'A' ? 1 : (r === 'J' || r === 'Q' || r === 'K') ? 10 : +r;
+function cardHTML(c, anim) {
+  const red = c.s === '♥' || c.s === '♦';
+  const face = c.r === 'J' || c.r === 'Q' || c.r === 'K';
+  const center = face ? `<span class="cc face">${c.r}${c.s}</span>` : `<span class="cc">${c.r === 'A' ? c.s : c.s}</span>`;
+  return `<div class="card${red ? ' red' : ''}${anim ? ' deal-in' : ''}" aria-label="${c.r}${c.s}"><span class="cr">${c.r}<small>${c.s}</small></span>${center}</div>`;
+}
+const randSuit = () => SUITS[(Math.random() * 4) | 0];
+function cardForVal(v) {
+  let r; if (v === 1) r = 'A'; else if (v === 10) r = ['10', 'J', 'Q', 'K'][(Math.random() * 4) | 0]; else r = String(v);
+  return { r, s: randSuit(), v };
+}
+const handHard = cs => cs.reduce((a, c) => a + c.v, 0);
+const handAce = cs => cs.some(c => c.v === 1);
+const handTot = cs => totOf(handHard(cs), handAce(cs));
+const totLabel = cs => { if (!cs.length) return ''; const h = handHard(cs), a = handAce(cs), t = totOf(h, a); return softOf(h, a) && t < 21 ? `${t - 10} / ${t}` : String(t); };
+
+let toastTimer;
+function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, ms); }
+
+/* ---------------- EV LIST ---------------- */
+function evListHTML(res, best) {
+  const keys = Object.keys(res).sort((a, b) => res[b] - res[a]);
+  const maxAbs = Math.max(0.05, ...keys.map(k => Math.abs(res[k])));
+  const col = { H: 'var(--hit)', S: 'var(--stand)', D: 'var(--dbl)', P: 'var(--split)' };
+  return '<div class="evlist">' + keys.map(k => {
+    const v = res[k], w = Math.abs(v) / maxAbs * 50;
+    const style = v >= 0 ? `left:50%;width:${w}%` : `left:${50 - w}%;width:${w}%`;
+    return `<div class="evrow${k === best ? ' best' : ''}"><span>${ACT[k]} <span class="muted" style="font-weight:500;font-size:.75rem">${ACT_EN[k]}</span></span><span class="bar"><i style="${style};background:${col[k]}"></i></span><span class="v">${pct(v, 1)}</span></div>`;
+  }).join('') + '</div><p class="note" style="margin:0">A százalék a várható eredmény a tét arányában, hosszú távon. Példa: −10% azt jelenti, hogy 10 zsetonos téttel 100 ilyen kézen átlagosan 100 zsetont veszítesz.</p>';
+}
+
+/* ---------------- EXPLANATIONS ---------------- */
+function explain(hard, ace, up, pv, best) {
+  const t = totOf(hard, ace), soft = softOf(hard, ace);
+  const weak = up >= 2 && up <= 6, strong = up >= 7 || up === 1;
+  const u = UPNAME(up);
+  const out = [];
+  if (pv && best === 'P') {
+    if (pv === 1) out.push('Két ász együtt csak 2 vagy 12. Felosztva mindkét kéz 11-ről indul, és sok 10-es érték van a pakliban.');
+    else if (pv === 8) out.push('A 16 a legrosszabb kéz. Két 8-asból két, 8-ról induló kéz lesz, ami sokkal esélyesebb.');
+    else out.push(`Ezzel a párral két külön kézzel többet nyersz az osztó ${POSS(up)} ellen, mint egyben tartva.`);
+  } else if (pv === 10 && best === 'S') out.push('A 20 nagyon erős kéz, ritkán veszít. Felosztva két bizonytalan kezet csinálnál belőle.');
+  else if (pv === 5) out.push('Két 5-öst ne oszd fel. Ez egy 10-es kéz, úgy is kell játszani.');
+  else if (pv && best !== 'P' && (pv === 1 || pv === 8)) out.push(`Az osztó ${POSS(up)} ellen a felosztás itt nem éri meg, mert ha blackjacket húz, a felosztott második tétet is elveszíted.`);
+  if (best === 'D') out.push(`Az osztó lapjához (${u}) képest erős a kezed, sokszor nyersz vele. Ilyenkor érdemes dupla tétet kockáztatni.`);
+  if (!pv || best !== 'P') {
+    if (best === 'S' && !soft && t >= 12 && t <= 16 && weak) out.push(`Ha az osztó lapja ${u}, gyakran besokall. Ne kockáztasd, hogy te sokallsz be előbb, hagyd, hogy ő hibázzon.`);
+    if (best === 'H' && !soft && t >= 12 && t <= 16 && strong) out.push(`Az osztó lapja (${u}) erős, valószínűleg 17 felett végez. Ha megállsz, többnyire veszítesz, ezért lapot kell kérni, akkor is, ha kockázatos.`);
+    if (best === 'H' && soft) out.push('Puha kézzel egy lappal nem tudsz besokallni, mert az ász 1-nek is számíthat. Nyugodtan javíthatsz.');
+    if (best === 'S' && soft && t >= 18) out.push(`A puha ${t} itt elég jó ahhoz, hogy megállj.`);
+    if (best === 'H' && !soft && t <= 11) out.push('Ezzel a kézzel nem tudsz besokallni, csak jobb lehet.');
+    if (best === 'S' && !soft && t >= 17) out.push('17 felett a lapkérés túl gyakran visz 21 fölé.');
+    if (best === 'H' && t === 12 && (up === 2 || up === 3)) out.push('A 12 a 2 és 3 ellen kivétel: az osztó itt ritkábban sokall be, mint 4–6 ellen, ezért kérj lapot.');
+  }
+  const us = EUS.code(hard, ace, up, pv), eu = E.code(hard, ace, up, pv);
+  if (us !== eu) out.push(`<b>Európai szabály:</b> egy amerikai, lefordított lapos asztalon itt „${ACT[us[0]]}” lenne a helyes. Itt viszont az osztó blackjackje a duplázott vagy felosztott tétet is elviszi, ezért óvatosabban kell játszani.`);
+  return out;
+}
+
+/* ================= GAME ================= */
+const G = {
+  phase: 'bet', shoe: [], pos: 0, cut: 0, seats: [], dealer: [], bet: store.get('bet', 10),
+  balance: store.get('balance', prefs.bankroll), stats: store.get('gstats', { hands: 0, dec: 0, ok: 0, net: 0 }),
+  mistakes: store.get('gmist', []), active: null, pending: null, coach: null, hint: null, status: '', insurance: 0, shuffledMsg: false
+};
+const speedMs = () => ({ slow: 650, normal: 380, fast: 140 })[prefs.speed] || 380;
+function newShoe() {
+  const a = [];
+  for (let d = 0; d < 6; d++) for (const s of SUITS) for (const r of RANKS) a.push({ r, s, v: rankVal(r) });
+  for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; }
+  G.shoe = a; G.pos = 0; G.cut = 312 - Math.floor(312 * (0.22 + Math.random() * 0.06));
+}
+newShoe();
+function drawCard() { if (G.pos >= G.shoe.length) newShoe(); const c = Object.assign({}, G.shoe[G.pos++]); c.anim = true; return c; }
+function saveGame() { store.set('balance', G.balance); store.set('bet', G.bet); store.set('gstats', G.stats); store.set('gmist', G.mistakes.slice(0, 30)); }
+
+function setupSeats() {
+  const n = prefs.players, me = Math.min(prefs.seat, n) - 1;
+  G.seats = [];
+  for (let i = 0; i < n; i++) G.seats.push({ me: i === me, style: i === me ? null : prefs.others, hands: [], net: (G.seatNets && G.seatNets[i]) || 0, ins: 0 });
+}
+G.seatNets = [];
+
+function renderShoe() {
+  const left = G.shoe.length - G.pos;
+  $('#shoeInfo').innerHTML = `Cipő: <span class="num">${left}</span> lap<div class="shoe-bar"><i style="width:${left / 312 * 100}%"></i></div><span style="font-size:.66rem">vágókártya: <span class="num">${312 - G.cut}</span> lapnál</span>`;
+}
+function renderTable() {
+  // dealer
+  const dc = G.dealer;
+  $('#dealerCards').innerHTML = dc.length ? dc.map(c => { const h = cardHTML(c, c.anim); c.anim = false; return h; }).join('') + (dc.length === 1 && G.phase !== 'bet' ? '<div class="slot" style="margin-left:6px" title="Az osztó a második lapját csak a játékosok után húzza"></div>' : '') : '<div class="slot"></div>';
+  $('#dealerTotal').textContent = dc.length ? totLabel(dc) + (G.dealerBJ ? ' · BlackJack' : (handTot(dc) > 21 ? ' · besokallt' : '')) : '';
+  $('#feltRules').textContent = `${rules.h17 ? 'Az osztó puha 17-re húz' : 'Az osztó minden 17-nél megáll'} · BlackJack ${rules.bjPay === 1.5 ? '3:2' : '6:5'} · Biztosítás 2:1`;
+  // seats
+  if (!G.seats.length) setupSeats();
+  const seatsHTML = G.seats.map((s, si) => {
+    const name = s.me ? 'TE' : `Játékos ${si + 1}`;
+    const sub = s.me ? `${si + 1}. hely` : `${si + 1}. hely · ${STYLE_NAME[s.style]}`;
+    let hands = s.hands.map((h, hi) => {
+      const active = G.active && G.active.seat === si && G.active.hand === hi;
+      const cards = h.cards.map(c => { const x = cardHTML(c, c.anim); c.anim = false; return x; }).join('');
+      let badge = '';
+      if (h.result) { const m = { win: ['win', 'Nyert'], lose: ['lose', 'Vesztett'], push: ['push', 'Döntetlen'], bj: ['bj', 'BlackJack'], bust: ['lose', 'Besokallt'] }[h.result]; badge = `<span class="badge ${m[0]}">${m[1]}</span>`; }
+      else if (h.cards.length && handTot(h.cards) > 21) badge = '<span class="badge lose">Besokallt</span>';
+      const betTag = s.me ? `<span class="bet-tag">${h.bet}${h.doubled ? ' (dupla)' : ''}</span>` : '';
+      return `<div class="hand${active ? ' active' : ''}"><div class="cards">${cards || '<div class="slot"></div>'}</div><span class="total">${totLabel(h.cards)}</span>${betTag}${badge}</div>`;
+    }).join('');
+    if (!s.hands.length) hands = `<div class="hand"><div class="cards"><div class="slot"></div></div>${s.me ? `<span class="bet-tag">tét: ${G.bet}</span>` : ''}</div>`;
+    const net = s.me ? '' : `<span class="seat-net">${s.net >= 0 ? '+' : ''}${fmt(s.net)}</span>`;
+    return `<div class="seat${s.me ? ' me' : ''}"><div class="seat-name">${name}<br><span style="font-weight:500">${sub}</span></div><div class="hands">${hands}</div>${net}</div>`;
+  }).join('');
+  $('#seats').innerHTML = seatsHTML;
+  renderShoe();
+  $('#topBalance').textContent = fmt(G.balance);
+}
+
+function userHand() { if (!G.active) return null; const s = G.seats[G.active.seat]; return s && s.me ? s.hands[G.active.hand] : null; }
+function userOptions(h) {
+  const cs = h.cards, two = cs.length === 2, t = handTot(cs);
+  const pv = two && cs[0].v === cs[1].v ? cs[0].v : 0;
+  const seat = G.seats.find(s => s.me);
+  const canAfford = G.balance >= h.base;
+  const canSplit = !!pv && seat.hands.length < rules.maxHands && canAfford && !(h.split && pv === 1);
+  const canDbl = two && t < 21 && E.dblAllowed(t) && (!h.split || rules.das) && canAfford;
+  return { two, pv, canSplit, canDbl, t };
+}
+function userEval(h) {
+  const o = userOptions(h);
+  const res = E.evaluate(handHard(h.cards), handAce(h.cards), G.dealer[0].v, { two: o.two, inSplit: h.split, pairVal: o.canSplit ? o.pv : 0, noDouble: !o.canDbl, noSplit: !o.canSplit });
+  return { res, best: E.argmax(res), o };
+}
+function handDesc(cs) {
+  const h = handHard(cs), a = handAce(cs), t = totOf(h, a);
+  if (cs.length === 2 && cs[0].v === cs[1].v) return `${cs[0].v === 1 ? 'Á' : cs[0].v},${cs[1].v === 1 ? 'Á' : cs[1].v}`;
+  return softOf(h, a) ? `puha ${t}` : `kemény ${t}`;
+}
+
+function renderControls() {
+  const c = $('#controls');
+  if (G.phase === 'bet') {
+    const chips = [5, 10, 25, 50, 100].map(v => `<button class="chipbtn" data-chip="${v}" aria-label="${v} zseton hozzáadása"><span class="chip c${v}">${v}</span></button>`).join('');
+    const broke = G.balance < 5;
+    c.innerHTML = `<div class="status-line">${G.status || 'Tedd meg a téted, aztán ossz.'}</div>
+      <div class="btnrow" style="align-items:center">${chips}</div>
+      <div class="btnrow" style="align-items:center"><span>Tét: <b class="num" style="color:var(--brass)">${G.bet}</b></span>
+      <button class="btn sm ghost" id="betClear">Tét törlése</button>
+      ${broke ? '<button class="btn sm" id="refill">Új zseton</button>' : ''}
+      <button class="btn primary" id="dealBtn" ${G.bet < 5 || G.bet > G.balance ? 'disabled' : ''}>Osztás<small><span class="kbd" style="border-color:#4a3a17;color:#4a3a17">Enter</span></small></button></div>`;
+    return;
+  }
+  if (G.phase === 'insurance') {
+    c.innerHTML = `<div class="status-line">Az osztó ászt mutat. Kérsz biztosítást? (fél tét: ${G.bet / 2}, 2:1-et fizet, ha az osztó blackjacket kap)</div>
+      <div class="btnrow"><button class="btn act-S" data-ins="no">Nem<small>No insurance</small></button><button class="btn" data-ins="yes" ${G.balance < G.bet / 2 ? 'disabled' : ''}>Igen<small>Insurance</small></button></div>`;
+    return;
+  }
+  const h = userHand();
+  if (G.phase === 'play' && h && G.pending) {
+    const { res, best, o } = userEval(h);
+    let coach = '';
+    if (G.coach) {
+      coach = `<div class="coach"><p><b>A táblázat szerint itt: ${ACT[G.coach.best]}</b> (${ACT_EN[G.coach.best]}). Te ezt választottad: ${ACT[G.coach.chosen]}.</p>
+        <p class="muted" style="font-size:.85rem">${handDesc(h.cards)} az osztó ${POSS(G.dealer[0].v)} ellen.</p>
+        ${evListHTML(G.coach.res, G.coach.best)}
+        <div class="btnrow" style="margin-top:10px"><button class="btn primary" data-coach="fix">${ACT[G.coach.best]}<small>a táblázat szerint</small></button><button class="btn ghost" data-coach="keep">Maradok: ${ACT[G.coach.chosen]}</button></div></div>`;
+      c.innerHTML = `<div class="status-line">Biztos?</div>${coach}`;
+      return;
+    }
+    const hint = G.hint ? `<div class="coach"><p style="margin:0"><b>Tipp: ${ACT[best]}</b> (${ACT_EN[best]}). ${explain(handHard(h.cards), handAce(h.cards), G.dealer[0].v, o.canSplit ? o.pv : 0, best)[0] || ''}</p></div>` : '';
+    c.innerHTML = `<div class="status-line">Te jössz: ${handDesc(h.cards)} az osztó ${POSS(G.dealer[0].v)} ellen${G.seats.find(s => s.me).hands.length > 1 ? ` · ${G.active.hand + 1}. kéz` : ''}</div>
+      ${hint}
+      <div class="btnrow">
+        <button class="btn act-H" data-act="H">Lap<small>Hit · H</small></button>
+        <button class="btn act-S" data-act="S">Megáll<small>Stand · S</small></button>
+        <button class="btn act-D" data-act="D" ${o.canDbl ? '' : 'disabled'}>Dupláz<small>Double · D</small></button>
+        <button class="btn act-P" data-act="P" ${o.canSplit ? '' : 'disabled'}>Feloszt<small>Split · P</small></button>
+        <button class="btn ghost" data-hint="1">Tipp<small>?</small></button>
+      </div>`;
+    return;
+  }
+  c.innerHTML = `<div class="status-line">${G.status || ''}</div>`;
+}
+function renderStats() {
+  const s = G.stats;
+  const acc = s.dec ? s.ok / s.dec : null;
+  $('#gStats').innerHTML = `<dt>Lejátszott kör</dt><dd>${s.hands}</dd><dt>Döntések</dt><dd>${s.dec}</dd><dt>Táblázat szerinti</dt><dd>${acc == null ? '–' : fmt(acc * 100, 0) + '%'}</dd><dt>Nyereség / veszteség</dt><dd style="color:${s.net >= 0 ? 'var(--good)' : 'var(--bad)'}">${s.net >= 0 ? '+' : ''}${fmt(s.net, s.net % 1 ? 1 : 0)}</dd><dt>Zseton</dt><dd>${fmt(G.balance, G.balance % 1 ? 1 : 0)}</dd>`;
+  $('#gMistakes').innerHTML = G.mistakes.length ? G.mistakes.slice(0, 5).map(m => `<li>${m}</li>`).join('') : '<li style="border-color:var(--good)" class="muted">Még nincs hibád. Így tovább!</li>';
+}
+function renderGame() { renderTable(); renderControls(); renderStats(); }
+
+function nextAction() { return new Promise(res => { G.pending = res; renderGame(); }); }
+function resolvePending(v) { if (G.pending) { const p = G.pending; G.pending = null; p(v); } }
+
+async function deal() {
+  if (G.phase !== 'bet' || G.bet > G.balance || G.bet < 5) return;
+  setupSeats();
+  if (G.pos >= G.cut) { newShoe(); toast('Elérte a vágókártyát. A krupié megkeverte a 6 paklit.'); }
+  G.status = ''; G.dealer = []; G.dealerBJ = false; G.insurance = 0; G.hint = null; G.coach = null;
+  const me = G.seats.find(s => s.me);
+  G.balance -= G.bet;
+  for (const s of G.seats) s.hands = [{ cards: [], bet: s.me ? G.bet : 10, base: s.me ? G.bet : 10, doubled: false, split: false, sa: false, result: null }];
+  G.phase = 'deal'; renderGame();
+  const ms = speedMs();
+  for (const s of G.seats) { s.hands[0].cards.push(drawCard()); renderTable(); await sleep(ms); }
+  G.dealer.push(drawCard()); renderTable(); await sleep(ms);
+  for (const s of G.seats) { s.hands[0].cards.push(drawCard()); renderTable(); await sleep(ms); }
+  const up = G.dealer[0].v;
+  if (up === 1) {
+    G.phase = 'insurance'; renderGame();
+    const ans = await new Promise(r => { G.insResolve = r; });
+    if (ans === 'yes') {
+      G.insurance = G.bet / 2; G.balance -= G.insurance;
+      G.stats.dec++;
+      G.mistakes.unshift(`Biztosítást kötöttél (osztó: Á). Alapstratégia: soha, mert hosszú távon kb. 7,7%-ot veszítesz a biztosítás tétjén.`);
+      if (prefs.coach !== 'off') toast('Az alapstratégia szerint soha ne köss biztosítást. Hosszú távon veszteséges.', 3600);
+    } else { G.stats.dec++; G.stats.ok++; }
+  }
+  G.phase = 'play';
+  for (let si = 0; si < G.seats.length; si++) {
+    const s = G.seats[si];
+    if (s.me) await playUser(si); else await playBot(si);
+  }
+  G.active = null;
+  await dealerPlay();
+  settle();
+}
+
+async function playBot(si) {
+  const s = G.seats[si], style = STYLES[s.style], up = G.dealer[0].v, ms = speedMs();
+  for (let hi = 0; hi < s.hands.length; hi++) {
+    const h = s.hands[hi];
+    G.active = { seat: si, hand: hi };
+    if (h.cards.length === 1) { h.cards.push(drawCard()); renderTable(); await sleep(ms); }
+    if (!h.split && h.cards.length === 2 && handTot(h.cards) === 21) { renderTable(); await sleep(ms / 2); continue; }
+    for (;;) {
+      const t = handTot(h.cards); if (t >= 21 || h.sa) break;
+      const two = h.cards.length === 2, pv = two && h.cards[0].v === h.cards[1].v ? h.cards[0].v : 0;
+      const canSplit = !!pv && s.hands.length < rules.maxHands && !(h.split && pv === 1);
+      const canDbl = two && E.dblAllowed(t) && (!h.split || rules.das);
+      let a = style(handHard(h.cards), handAce(h.cards), up, two, h.split, pv, canSplit, canDbl);
+      if (a === 'P' && !canSplit) a = 'H';
+      if (a === 'D' && !canDbl) a = E.decide(handHard(h.cards), handAce(h.cards), up, false, h.split, 0, false, false);
+      G.status = `Játékos ${si + 1}: ${ACT[a]}`; renderControls();
+      await sleep(ms);
+      if (a === 'S') break;
+      if (a === 'H') { h.cards.push(drawCard()); renderTable(); continue; }
+      if (a === 'D') { h.bet *= 2; h.doubled = true; h.cards.push(drawCard()); renderTable(); await sleep(ms); break; }
+      if (a === 'P') {
+        const c2 = h.cards.pop(); const nh = { cards: [c2], bet: h.base, base: h.base, doubled: false, split: true, sa: pv === 1, result: null };
+        h.split = true; h.sa = pv === 1; s.hands.splice(hi + 1, 0, nh);
+        h.cards.push(drawCard()); renderTable(); await sleep(ms);
+        continue;
+      }
+    }
+    renderTable();
+  }
+}
+
+async function playUser(si) {
+  const s = G.seats[si], ms = speedMs();
+  for (let hi = 0; hi < s.hands.length; hi++) {
+    const h = s.hands[hi];
+    G.active = { seat: si, hand: hi }; G.hint = null;
+    if (h.cards.length === 1) { h.cards.push(drawCard()); renderTable(); await sleep(ms); }
+    if (!h.split && h.cards.length === 2 && handTot(h.cards) === 21) { G.status = 'BlackJack!'; renderGame(); await sleep(ms * 1.5); continue; }
+    for (;;) {
+      const t = handTot(h.cards); if (t >= 21 || h.sa) { renderGame(); if (t > 21) await sleep(ms); break; }
+      G.status = '';
+      let a = await nextAction();
+      const ev = userEval(h);
+      if (!ev.res[a]) continue;
+      const desc = `${handDesc(h.cards)} vs ${UPNAME(G.dealer[0].v)}`;
+      if (prefs.coach !== 'off' || true) {
+        G.stats.dec++;
+        if (a === ev.best || Math.abs(ev.res[a] - ev.res[ev.best]) < 1e-9) G.stats.ok++;
+        else {
+          G.mistakes.unshift(`${desc}: ${ACT[a]} helyett ${ACT[ev.best]} (${pct(ev.res[a] - ev.res[ev.best], 1)})`);
+          if (prefs.coach === 'warn') {
+            G.coach = { chosen: a, best: ev.best, res: ev.res };
+            const b = await nextAction();
+            G.coach = null;
+            if (b === 'fix') a = ev.best;
+          } else if (prefs.coach === 'after') toast(`A táblázat szerint itt ${ACT[ev.best]} lett volna a jobb.`, 3000);
+        }
+      }
+      G.hint = null; renderControls();
+      if (a === 'S') break;
+      if (a === 'H') { h.cards.push(drawCard()); renderTable(); await sleep(ms * 0.6); continue; }
+      if (a === 'D') { G.balance -= h.base; h.bet += h.base; h.doubled = true; h.cards.push(drawCard()); renderTable(); await sleep(ms); break; }
+      if (a === 'P') {
+        const pv = h.cards[0].v;
+        G.balance -= h.base;
+        const c2 = h.cards.pop(); const nh = { cards: [c2], bet: h.base, base: h.base, doubled: false, split: true, sa: pv === 1, result: null };
+        h.split = true; h.sa = pv === 1; s.hands.splice(hi + 1, 0, nh);
+        h.cards.push(drawCard()); renderTable(); await sleep(ms);
+        continue;
+      }
+    }
+  }
+  G.status = ''; saveGame();
+}
+
+async function dealerPlay() {
+  const ms = speedMs();
+  let live = false, nat = false;
+  for (const s of G.seats) for (const h of s.hands) { const t = handTot(h.cards); const isNat = !h.split && h.cards.length === 2 && t === 21; if (isNat) nat = true; else if (t <= 21) live = true; }
+  G.status = 'Az osztó húz…'; renderControls();
+  const up = G.dealer[0].v;
+  if (live || G.insurance) {
+    for (;;) {
+      await sleep(ms); G.dealer.push(drawCard()); renderTable();
+      const t = handTot(G.dealer);
+      if (G.dealer.length === 2 && t === 21) { G.dealerBJ = true; break; }
+      if (t > 21) break;
+      if (t >= 17 && !(rules.h17 && softOf(handHard(G.dealer), handAce(G.dealer)) && t === 17)) break;
+    }
+  } else if (nat && (up === 1 || up === 10)) {
+    await sleep(ms); G.dealer.push(drawCard()); if (handTot(G.dealer) === 21) G.dealerBJ = true;
+  }
+  renderTable(); await sleep(ms);
+}
+
+function settle() {
+  const dt = handTot(G.dealer), dBJ = !!G.dealerBJ;
+  let myNet = 0;
+  G.seats.forEach((s, si) => {
+    let net = 0;
+    const first = s.hands[0];
+    const nat = !first.split && s.hands.length === 1 && first.cards.length === 2 && handTot(first.cards) === 21;
+    if (dBJ) {
+      if (nat) { first.result = 'push'; }
+      else {
+        if (rules.dbj === 'all') { for (const h of s.hands) { h.result = 'lose'; net -= h.bet; } }
+        else { for (const h of s.hands) h.result = 'lose'; net -= first.base; }
+      }
+    } else {
+      for (const h of s.hands) {
+        const t = handTot(h.cards);
+        if (nat) { h.result = 'bj'; net += h.bet * rules.bjPay; continue; }
+        if (t > 21) { h.result = 'bust'; net -= h.bet; continue; }
+        if (dt > 21 || t > dt) { h.result = 'win'; net += h.bet; }
+        else if (t < dt) { h.result = 'lose'; net -= h.bet; }
+        else h.result = 'push';
+      }
+    }
+    if (s.me) {
+      // visszaadjuk a kint lévő téteket + nyereség
+      const staked = s.hands.reduce((a, h) => a + h.bet, 0);
+      G.balance += staked + net;
+      if (G.insurance) { if (dBJ) { G.balance += G.insurance * 3; net += G.insurance * 2; } else net -= G.insurance; }
+      myNet = net;
+    } else { s.net += net; G.seatNets[si] = s.net; }
+  });
+  G.stats.hands++; G.stats.net += myNet;
+  G.status = dBJ ? `Az osztónak blackjackje van. ${myNet === 0 ? 'Döntetlen.' : `Eredményed: ${myNet > 0 ? '+' : ''}${fmt(myNet, myNet % 1 ? 1 : 0)}`}` :
+    myNet > 0 ? `Nyertél: +${fmt(myNet, myNet % 1 ? 1 : 0)}` : myNet < 0 ? `Vesztettél: −${fmt(-myNet, myNet % 1 ? 1 : 0)}` : 'Döntetlen, a tét visszajár.';
+  G.phase = 'bet';
+  if (G.bet > G.balance) G.bet = Math.max(0, Math.floor(G.balance / 5) * 5);
+  saveGame(); renderGame();
+}
+
+$('#controls').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || b.disabled) return;
+  if (b.dataset.chip) { G.bet = Math.min(G.balance, G.bet + +b.dataset.chip); G.status = ''; saveGame(); renderGame(); }
+  else if (b.id === 'betClear') { G.bet = 0; renderGame(); }
+  else if (b.id === 'refill') { G.balance = prefs.bankroll; G.bet = 10; saveGame(); renderGame(); }
+  else if (b.id === 'dealBtn') deal();
+  else if (b.dataset.ins) { const r = G.insResolve; G.insResolve = null; G.phase = 'play'; r && r(b.dataset.ins); }
+  else if (b.dataset.act) resolvePending(b.dataset.act);
+  else if (b.dataset.coach) resolvePending(b.dataset.coach);
+  else if (b.dataset.hint) { G.hint = true; renderControls(); }
+});
+
+function fillSeatSelect(selP, selS, nP, seat) {
+  selP.innerHTML = [1, 2, 3, 4, 5, 6, 7].map(n => `<option value="${n}" ${n === nP ? 'selected' : ''}>${n === 1 ? '1 (csak te)' : n}</option>`).join('');
+  selS.innerHTML = Array.from({ length: nP }, (_, i) => i + 1).map(n => `<option value="${n}" ${n === seat ? 'selected' : ''}>${n}. hely${n === 1 ? ' (első)' : n === nP && nP > 1 ? ' (utolsó)' : ''}</option>`).join('');
+}
+function syncTableForm() {
+  prefs.seat = Math.min(prefs.seat, prefs.players);
+  fillSeatSelect($('#tPlayers'), $('#tSeat'), prefs.players, prefs.seat);
+  $('#tOthers').value = prefs.others;
+}
+['tPlayers', 'tSeat', 'tOthers'].forEach(id => $('#' + id).addEventListener('change', () => {
+  if (G.phase !== 'bet') { toast('Várd meg a kör végét.'); syncTableForm(); return; }
+  prefs.players = +$('#tPlayers').value; prefs.seat = +$('#tSeat').value; prefs.others = $('#tOthers').value;
+  G.seatNets = []; savePrefs(); syncTableForm(); setupSeats(); renderGame();
+}));
+$('#hideNewbie').addEventListener('click', () => { prefs.newbieHidden = true; savePrefs(); $('#newbieBox').hidden = true; });
+
+/* ================= DRILL ================= */
+const D = { filter: 'all', cur: null, answered: null, stats: store.get('dstats', { n: 0, ok: 0, streak: 0, bestStreak: 0 }), mine: store.get('dmine', {}) };
+function scenarioKey(sc) { return `${sc.cat}|${sc.cat === 'pair' ? sc.pv : sc.cat === 'soft' ? sc.t : Math.min(sc.t, 17)}|${sc.up}`; }
+function drawScenario() {
+  const randVal = () => { const r = Math.random() * 13; return r < 1 ? 1 : r < 9 ? Math.floor(r) + 1 : 10; };
+  for (let guard = 0; guard < 4000; guard++) {
+    const a = randVal(), b = randVal(), up = randVal();
+    const hard = a + b, ace = a === 1 || b === 1, t = totOf(hard, ace);
+    if (ace && hard === 11) continue;
+    const cat = a === b ? 'pair' : softOf(hard, ace) ? 'soft' : 'hard';
+    if (cat === 'hard' && t >= 19 && Math.random() < 0.8) continue; // kevesebb unalmas eset
+    if (D.filter === 'hard' && cat !== 'hard') continue;
+    if (D.filter === 'soft' && cat !== 'soft') continue;
+    if (D.filter === 'pair' && cat !== 'pair') continue;
+    const pv = cat === 'pair' ? a : 0;
+    const res = E.evaluate(hard, ace, up, { two: true, pairVal: pv });
+    const keys = Object.keys(res).sort((x, y) => res[y] - res[x]);
+    const gap = res[keys[0]] - res[keys[1]];
+    const sc = { a, b, up, hard, ace, t, cat, pv, res, best: keys[0], gap };
+    if (D.filter === 'hardcases' && Math.random() > Math.min(1, 0.025 / Math.max(gap, 0.001))) continue;
+    if (D.filter === 'mine') { const ks = Object.keys(D.mine).filter(k => D.mine[k] > 0); if (!ks.length) { D.filter = 'all'; markFilter(); toast('Még nincs hibád a gyorsgyakorlásban. Minden kezet mutatok.'); } else if (!ks.includes(scenarioKey(sc))) continue; }
+    sc.cards = [cardForVal(a), cardForVal(b)]; sc.upCard = cardForVal(up);
+    return sc;
+  }
+  D.filter = 'all'; markFilter(); return drawScenario();
+}
+function markFilter() { $$('#drillFilter button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.f === D.filter))); }
+function renderDrill() {
+  const sc = D.cur;
+  const showD = true;
+  const btn = (k, en, enabled) => `<button class="btn act-${k}" data-dact="${k}" ${enabled && !D.answered ? '' : 'disabled'}>${ACT[k]}<small>${en} · ${k}</small></button>`;
+  $('#drillFelt').innerHTML = `<div class="zone-label">Osztó</div><div class="cards">${cardHTML(sc.upCard, true)}</div>
+    <div class="vs">— KONTRA —</div>
+    <div class="cards">${sc.cards.map(c => cardHTML(c, true)).join('')}</div><span class="total">${totLabel(sc.cards)}</span>
+    <div class="btnrow">${btn('H', 'Hit', true)}${btn('S', 'Stand', true)}${btn('D', 'Double', !!sc.res.D)}${btn('P', 'Split', !!sc.res.P)}</div>
+    ${D.answered ? '<button class="btn primary" id="drillNext">Következő<small>Enter</small></button>' : ''}`;
+  const s = D.stats;
+  $('#drillStats').innerHTML = `<div class="stat"><b>${s.n}</b><span>kéz</span></div><div class="stat"><b>${s.n ? fmt(s.ok / s.n * 100, 0) + '%' : '–'}</b><span>helyes</span></div><div class="stat"><b>${s.streak}</b><span>sorozat</span></div><div class="stat"><b>${s.bestStreak}</b><span>legjobb</span></div>`;
+  const fb = $('#drillFeedback');
+  if (!D.answered) { fb.innerHTML = `<div class="panel"><h3>Mit lépsz?</h3><p class="muted" style="margin:0">${handDesc(sc.cards)} az osztó ${POSS(sc.up)} ellen. Válassz egy lépést a lapok alatt.</p></div>`; return; }
+  const ok = D.answered === sc.best;
+  const ex = explain(sc.hard, sc.ace, sc.up, sc.pv, sc.best);
+  fb.innerHTML = `<div class="feedback ${ok ? 'ok' : 'no'}"><h3>${ok ? 'Helyes: ' + ACT[sc.best] : `Nem. A helyes: ${ACT[sc.best]}`}</h3>
+    ${!ok ? `<p class="muted" style="font-size:.85rem">A te lépésed (${ACT[D.answered]}) ${pct(sc.res[D.answered] - sc.res[sc.best], 1)}-kal rosszabb, a tét arányában.</p>` : ''}
+    ${ex.map(x => `<p>${x}</p>`).join('')}
+    ${evListHTML(sc.res, sc.best)}</div>`;
+}
+function answerDrill(a) {
+  if (D.answered || !D.cur.res[a]) return;
+  D.answered = a; const sc = D.cur, s = D.stats, k = scenarioKey(sc);
+  s.n++;
+  if (a === sc.best) { s.ok++; s.streak++; s.bestStreak = Math.max(s.bestStreak, s.streak); if (D.mine[k]) D.mine[k]--; }
+  else { s.streak = 0; D.mine[k] = (D.mine[k] || 0) + 2; }
+  store.set('dstats', s); store.set('dmine', D.mine);
+  renderDrill();
+}
+function nextDrill() { D.cur = drawScenario(); D.answered = null; renderDrill(); }
+$('#drillFelt').addEventListener('click', e => { const b = e.target.closest('button'); if (!b || b.disabled) return; if (b.dataset.dact) answerDrill(b.dataset.dact); else if (b.id === 'drillNext') nextDrill(); });
+$('#drillFilter').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; D.filter = b.dataset.f; markFilter(); nextDrill(); });
+
+/* ================= CHART ================= */
+const CH = { tab: 'hard', sel: null };
+const UPS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 1];
+function chartRows(tab) {
+  if (tab === 'hard') return [{ label: '5–8', hard: 8, ace: false, pv: 0 }, ...[9, 10, 11, 12, 13, 14, 15, 16].map(t => ({ label: String(t), hard: t, ace: false, pv: 0 })), { label: '17+', hard: 17, ace: false, pv: 0 }];
+  if (tab === 'soft') return [2, 3, 4, 5, 6, 7, 8, 9].map(x => ({ label: `Á,${x}`, hard: 1 + x, ace: true, pv: 0, sub: `puha ${11 + x}` }));
+  return [1, 10, 9, 8, 7, 6, 5, 4, 3, 2].map(x => { const n = x === 1 ? 'Á' : x; return { label: `${n},${n}`, hard: x === 1 ? 2 : 2 * x, ace: x === 1, pv: x }; });
+}
+function rulesText() {
+  return `6 pakli · osztó ${rules.h17 ? 'puha 17-re húz' : 'minden 17-nél megáll'} · lefordított lap nincs · duplázás: ${rules.dbl === 'any' ? 'bármely két lapra' : rules.dbl === '9-11' ? 'csak 9–11' : 'csak 10–11'}${rules.das ? ', felosztás után is' : ''} · osztó blackjackje: ${rules.dbj === 'all' ? 'minden tét elvész' : 'csak az eredeti tét'}`;
+}
+function renderChart() {
+  $('#chartRules').textContent = rulesText();
+  $$('#chartTabs button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.t === CH.tab)));
+  const rows = chartRows(CH.tab);
+  let html = `<thead><tr><th></th><th colspan="10" style="text-align:center">Az osztó lapja</th></tr><tr><th class="rowh">Te</th>${UPS.map(u => `<th>${UPNAME(u)}</th>`).join('')}</tr></thead><tbody>`;
+  rows.forEach((r, ri) => {
+    html += `<tr><th class="rowh">${r.label}${r.sub ? `<br><span class="muted" style="font-size:.68rem">${r.sub}</span>` : ''}</th>`;
+    UPS.forEach(u => {
+      const c = E.code(r.hard, r.ace, u, r.pv), us = EUS.code(r.hard, r.ace, u, r.pv);
+      const sel = CH.sel && CH.sel.ri === ri && CH.sel.u === u && CH.sel.tab === CH.tab;
+      html += `<td><button class="c-${c}${us !== c ? ' diff' : ''}${sel ? ' sel' : ''}" data-ri="${ri}" data-u="${u}" aria-label="${r.label} az osztó ${UPNAME(u)} ellen: ${c}">${c}</button></td>`;
+    });
+    html += '</tr>';
+  });
+  $('#stratTable').innerHTML = html + '</tbody>';
+  renderCellDetail();
+}
+function renderCellDetail() {
+  const box = $('#cellDetail');
+  if (!CH.sel || CH.sel.tab !== CH.tab) {
+    box.innerHTML = `<h3>Kattints egy cellára</h3><p class="muted" style="margin:0">Megmutatom, mennyit ér hosszú távon az egyes lépés, és miért az a helyes. A sorok a te kezedet, az oszlopok az osztó felfordított lapját mutatják.</p>
+      <div class="callout" style="margin-bottom:0"><b>Sorrend a fejedben:</b> 1. Pár? → Párok tábla. 2. Van ászod, ami 11-nek számít? → Puha tábla. 3. Minden más → Kemény tábla. Kettőnél több lapnál a duplázás már nem lehetséges, ilyenkor a D jelentése: lap, a Ds jelentése: megáll.</div>`;
+    return;
+  }
+  const r = chartRows(CH.tab)[CH.sel.ri], u = CH.sel.u;
+  const res = E.evaluate(r.hard, r.ace, u, { two: true, pairVal: r.pv });
+  const best = E.argmax(res);
+  const ex = explain(r.hard, r.ace, u, r.pv, best);
+  const dd = E.ups[u].dd;
+  const bust = dd[5];
+  box.innerHTML = `<div class="eyebrow">${CH.tab === 'hard' ? 'Kemény' : CH.tab === 'soft' ? 'Puha' : 'Pár'}</div><h3>${r.label}${r.sub ? ` (${r.sub})` : ''} az osztó ${POSS(u)} ellen</h3>
+    <p style="margin:0 0 4px"><b>Helyes lépés: ${ACT[best]}</b> <span class="muted">(${ACT_EN[best]})</span></p>
+    ${evListHTML(res, best)}
+    ${ex.map(x => `<p style="margin:8px 0 0">${x}</p>`).join('')}
+    <p class="note" style="margin-top:10px">Ha az osztó lapja ${UPNAME(u)}, <b class="num">${fmt(bust * 100, 0)}%</b> eséllyel sokall be, és <b class="num">${fmt(dd[6] * 100, 1)}%</b> eséllyel kap blackjacket.</p>`;
+}
+$('#stratTable').addEventListener('click', e => { const b = e.target.closest('button[data-ri]'); if (!b) return; CH.sel = { tab: CH.tab, ri: +b.dataset.ri, u: +b.dataset.u }; renderChart(); });
+$('#chartTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; CH.tab = b.dataset.t; renderChart(); });
+
+/* ================= LESSONS ================= */
+function mh(...cs) { return `<span class="mini-hand cards">${cs.map(([r, s]) => cardHTML({ r, s })).join('')}</span>`; }
+function costRow(label, hard, ace, up, pv, wrong) {
+  const res = E.evaluate(hard, ace, up, { two: true, pairVal: pv });
+  const best = E.argmax(res);
+  if (!res[wrong] || best === wrong) return '';
+  return `<tr><td>${label}</td><td>${ACT[wrong]}</td><td>${ACT[best]}</td><td class="r">${pct(res[wrong] - res[best], 1)}</td></tr>`;
+}
+function europeanDiffs() {
+  const items = [];
+  for (const tab of ['hard', 'soft', 'pair']) chartRows(tab).forEach(r => UPS.forEach(u => {
+    const c = E.code(r.hard, r.ace, u, r.pv), us = EUS.code(r.hard, r.ace, u, r.pv);
+    if (c !== us) items.push(`<li><b>${tab === 'pair' ? r.label : tab === 'soft' ? r.label : r.label} az osztó ${POSS(u)} ellen:</b> itt ${ACT[c[0]]}, amerikai asztalon ${ACT[us[0]]}.</li>`);
+  }));
+  return items.length ? `<ul>${items.join('')}</ul>` : '<p>Ezekkel a beállításokkal nincs eltérés.</p>';
+}
+function renderLessons() {
+  const dbjTxt = rules.dbj === 'all' ? 'mindenki elveszíti a teljes tétjét, a duplázott és a felosztott tétet is' : 'csak az eredeti tétedet veszíted el';
+  const dblTxt = rules.dbl === 'any' ? 'bármely két lapra' : rules.dbl === '9-11' ? 'csak akkor, ha az első két lapod összege 9, 10 vagy 11' : 'csak akkor, ha az első két lapod összege 10 vagy 11';
+  const edge = -EDGE;
+  $('#lessons').innerHTML = `
+  <article class="lesson" id="l-cel"><div class="eyebrow">1. lecke</div><h2>A cél és a lapok értéke</h2>
+    <p>A cél nem a 21, hanem hogy <strong>legyőzd az osztót</strong>: magasabb összeged legyen nála úgy, hogy nem lépsz 21 fölé. Ha az osztó lépi túl a 21-et (<span class="term">besokall</span>), minden még játékban lévő kéz nyer.</p>
+    <ul><li><strong>2–10:</strong> annyit ér, amennyi rá van írva.</li><li><strong>J, Q, K</strong> (bubi, dáma, király): 10.</li><li><strong>Ász:</strong> 1 vagy 11, ahogy jobb.</li></ul>
+    <p><span class="term">Puha kéz</span>: van benne ász, ami 11-nek számít, például ${mh(['A', '♠'], ['6', '♥'])} = puha 17. Egy újabb lappal nem tudsz besokallni, mert az ász visszaváltozhat 1-re. <span class="term">Kemény kéz</span>: nincs benne 11-nek számító ász, például ${mh(['10', '♣'], ['6', '♦'])} = kemény 16.</p>
+    <p><span class="term">BlackJack</span>: az első két lapod egy ász és egy 10 értékű lap ${mh(['A', '♠'], ['K', '♥'])}. ${rules.bjPay === 1.5 ? '3:2-t fizet, vagyis 10 zseton tétre 15-öt nyersz.' : '6:5-öt fizet, vagyis 10 zseton tétre 12-t nyersz. Ez rosszabb a 3:2-nél, kerüld az ilyen asztalt.'} Felosztás után az ász + 10 már csak 21, nem blackjack.</p>
+  </article>
+  <article class="lesson" id="l-menet"><div class="eyebrow">2. lecke</div><h2>Így megy egy kör (európai osztás)</h2>
+    <ol>
+      <li>Mindenki a saját körébe teszi a tétjét.</li>
+      <li>A krupié a saját bal oldalától kezdve (te onnan nézve <strong>jobbról balra</strong>) mindenkinek ad egy lapot képpel felfelé, aztán magának is egyet.</li>
+      <li>Mindenki kap egy második lapot. <strong>Az osztónak csak egy lapja van.</strong> Nincs lefordított lapja, és nem is néz alá.</li>
+      <li>Sorban mindenki dönt: lap, megáll, dupláz vagy feloszt.</li>
+      <li>Ha mindenki végzett, az osztó húz: 16-ig mindig húz, ${rules.h17 ? 'puha 17-nél is húz, kemény 17-nél megáll' : '17-nél mindig megáll, puha 17-nél is'}. Neki nincs választása.</li>
+      <li>Ha az osztó a második lapjával blackjacket kap, ${dbjTxt}. Ha neked is blackjacked van, az döntetlen.</li>
+    </ol>
+    <div class="callout">A cipőben <strong>6 pakli, összesen 312 lap</strong> van. A krupié egy színes vágókártyát tesz a cipőbe, nagyjából a lapok háromnegyedénél. Ha az előjön, a kör végén újrakeveri az összes lapot. Ebben az alkalmazásban is pontosan így megy.</div>
+  </article>
+  <article class="lesson" id="l-dontes"><div class="eyebrow">3. lecke</div><h2>A döntéseid</h2>
+    <p>Élő kaszinóban <strong>kézjelekkel</strong> kell jelezni, mert a kamerák a kezedet figyelik. A szóbeli kérés önmagában nem elég.</p>
+    <div class="signals">
+      <div class="signal"><b>Lap · Hit</b>Kérsz még egy lapot. Jelzés: ujjal kopogtatsz az asztalon a lapjaid mellett.</div>
+      <div class="signal"><b>Megáll · Stand</b>Nem kérsz többet. Jelzés: tenyérrel vízszintesen elintesz a lapjaid fölött.</div>
+      <div class="signal"><b>Dupláz · Double</b>A téted mellé még ugyanannyit teszel, és <strong>pontosan egy lapot</strong> kapsz. Itt ${dblTxt}${rules.das ? ', felosztás után is' : ''}. Jelzés: a zsetont a téted mellé teszed (nem rá), és egy ujjal mutatsz.</div>
+      <div class="signal"><b>Feloszt · Split</b>Két egyforma értékű lapot két külön kézre bontasz, a második kézre ugyanannyi tétet teszel. Ászokra 1-1 lap jár. Jelzés: zseton a tét mellé, és V jel két ujjal.</div>
+      <div class="signal"><b>Biztosítás · Insurance</b>Ha az osztó ászt mutat, fél tétet tehetsz arra, hogy blackjacket kap (2:1). Hosszú távon a biztosítás tétjének kb. 7,7%-át elveszíted, ezért <strong>az alapstratégia szerint soha</strong>. A „páros pénz” (even money) is ugyanez, csak más néven.</div>
+      <div class="signal"><b>Megadás · Surrender</b>Ezen az asztalon nincs. Ahol van, ott a tét felét visszakapod, ha feladod a kezet.</div>
+    </div>
+  </article>
+  <article class="lesson" id="l-tabla"><div class="eyebrow">4. lecke</div><h2>Hogyan olvasd a táblázatot</h2>
+    <p>Az <a href="#tablazat" style="color:var(--brass)">alapstratégia</a> minden lehetséges kézre megmondja, melyik lépéssel veszítesz a legkevesebbet, vagy nyersz a legtöbbet hosszú távon. Nem tippelés: a gép az összes lehetséges lapsorrendet végigszámolja a te szabályaiddal.</p>
+    <ol><li>Keresd meg a sort a saját kezed szerint. Ha pár, a <strong>Párok</strong> tábla. Ha van 11-nek számító ászod, a <strong>Puha</strong>. Minden más a <strong>Kemény</strong> tábla.</li>
+      <li>Keresd meg az oszlopot az osztó felfordított lapja szerint.</li>
+      <li>Ahol a cella D, de már 3 lapod van (nem lehet duplázni): lap. Ahol Ds: megáll.</li></ol>
+    <div class="callout"><b>Egyszerű ökölszabályok, ha elfelejted a táblát:</b> 12–16-nál állj meg, ha az osztónak 2–6 van (kivéve a 12-t 2 és 3 ellen), különben kérj lapot. 17-től mindig állj meg. 11-et és 10-et duplázz, ha az osztó lapja kisebb, mint a tiéd. Ászokat és 8-asokat oszd fel (kivétel az osztó 10-ese és ásza ellen, lásd lent). 10-eseket és 5-ösöket soha ne oszd fel.</div>
+  </article>
+  <article class="lesson" id="l-europai"><div class="eyebrow">5. lecke</div><h2>Ahol az európai szabály más</h2>
+    <p>A legtöbb interneten talált táblázat amerikai asztalra készült. Ott az osztó lefordított lappal benéz, és ha blackjackje van, azonnal vége a körnek, mielőtt bármit duplázhatnál. Itt ${rules.dbj === 'all' ? 'az osztó a végén húzza meg a második lapot, és ha blackjack, akkor a duplázott vagy felosztott pluszt is elviszi' : 'ugyan később derül ki, de csak az eredeti tét vész el, így alig van különbség'}. Ezért az osztó <strong>10-ese és ásza ellen</strong> óvatosabban kell duplázni és felosztani. A te szabályaiddal ezek a különbségek:</p>
+    ${europeanDiffs()}
+    <p class="note">A táblázatban ezeket a cellákat egy kis pötty jelöli.</p>
+  </article>
+  <article class="lesson" id="l-hibak"><div class="eyebrow">6. lecke</div><h2>Gyakori hibák és az áruk</h2>
+    <p>Ezeket látni a legtöbbször az asztaloknál. A szám azt mutatja, mennyit veszítesz átlagosan egy ilyen döntéssel, a tét arányában. Egy hiba nem tűnik soknak, de egy este alatt sokszor előjön.</p>
+    <div class="tscroll"><table class="plain"><thead><tr><th>Helyzet</th><th>Amit sokan csinálnak</th><th>Helyes</th><th class="r">Ára</th></tr></thead><tbody>
+      ${costRow('16 az osztó 10-ese ellen', 16, false, 10, 0, 'S')}
+      ${costRow('12 az osztó 2-ese ellen', 12, false, 2, 0, 'S')}
+      ${costRow('12 az osztó 3-asa ellen', 12, false, 3, 0, 'S')}
+      ${costRow('15 az osztó 7-ese ellen', 15, false, 7, 0, 'S')}
+      ${costRow('11 az osztó 10-ese ellen', 11, false, 10, 0, 'D')}
+      ${costRow('11 az osztó 6-osa ellen', 11, false, 6, 0, 'H')}
+      ${costRow('Á,7 az osztó 9-ese ellen', 8, true, 9, 0, 'S')}
+      ${costRow('Á,6 az osztó 4-ese ellen', 7, true, 4, 0, 'H')}
+      ${costRow('Á,7 az osztó 5-öse ellen', 8, true, 5, 0, 'S')}
+      ${costRow('8,8 az osztó 6-osa ellen', 16, false, 6, 8, 'S')}
+      ${costRow('8,8 az osztó 10-ese ellen', 16, false, 10, 8, 'P')}
+      ${costRow('10,10 az osztó 6-osa ellen', 20, false, 6, 10, 'P')}
+      ${costRow('Á,Á az osztó 6-osa ellen', 2, true, 6, 1, 'H')}
+      ${costRow('9,9 az osztó 9-ese ellen', 18, false, 9, 9, 'S')}
+      <tr><td>Osztó ásza</td><td>Biztosítás</td><td>Nem kell</td><td class="r">−7,7%<br><span class="muted" style="font-size:.7rem">a biztosításon</span></td></tr>
+    </tbody></table></div>
+    <h3 style="margin-top:18px;font-size:1.15rem">Teljes stratégiák összevetése</h3>
+    <p>Mennyit veszítesz kezenként, ha végig így játszol? (A számot a gép 400 000 kör lejátszásával méri.)</p>
+    <div id="styleCmp"><button class="btn sm" id="runStyleCmp">Számold ki</button> <span class="note">Az elméleti érték alapstratégiával: <b class="num">${pct(EDGE, 2)}</b> kezenként.</span></div>
+  </article>
+  <article class="lesson" id="l-asztal"><div class="eyebrow">7. lecke</div><h2>Számít, hányan ülnek az asztalnál?</h2>
+    <p>Röviden: <strong>egy kézre nézve nem számít</strong>, a tempóra nézve nagyon is.</p>
+    <ul>
+      <li><strong>A várható eredmény kezenként ugyanannyi</strong>, akár egyedül ülsz, akár hatan vagytok. Ugyanabból a megkevert cipőből jönnek a lapok, csak más sorrendben jutnak hozzád.</li>
+      <li><strong>A többiek döntései hosszú távon nem befolyásolják az eredményedet.</strong> A „rossz játékos elvette az osztó lapját” érzés valós pillanatokra emlékszik, de pont ugyanannyiszor menti meg a kört is, csak arra nem emlékszünk. A szimulációban ezt ki is próbálhatod.</li>
+      <li><strong>A hely sem számít.</strong> Az első és az utolsó hely (third base) között nincs különbség a te esélyeidben.</li>
+      <li><strong>A tempó viszont igen.</strong> Egyedül óránként kb. 200 kört lehet játszani, teli asztalnál kb. 50-et. Mivel a ház előnye minden körben érvényes, egyedül egy óra alatt várhatóan <strong>3–4-szer annyit veszítesz</strong>, és sokkal nagyobbak a kilengések is.</li>
+      <li>Ha egy adott keretből a lehető legtovább szeretnél játszani, a lassabb, telt asztal kíméli a pénztárcát. Ha egyedül ülsz le, kisebb téttel játssz.</li>
+    </ul>
+    <p>A pontos számokat az <a href="#szimulacio" style="color:var(--brass)">Asztal &amp; esélyek</a> fülön láthatod, a saját tétedre számolva.</p>
+  </article>
+  <article class="lesson" id="l-etikett"><div class="eyebrow">8. lecke</div><h2>Viselkedés az élő asztalnál</h2>
+    <ul>
+      <li>Készpénzt ne add a krupié kezébe. Tedd le az asztalra két kör között, és szólj, hogy zsetont kérsz.</li>
+      <li>Cipős játékban a lapok képpel felfelé jönnek. <strong>Ne nyúlj hozzájuk</strong>, és a tétedhez se a kör közben.</li>
+      <li>A döntésedet mindig kézjellel mutasd (lásd a 3. leckét).</li>
+      <li>Ha bizonytalan vagy, kérdezd meg a krupiét. Szívesen megmondja, mit mutat a táblázat.</li>
+      <li>Az asztali minimum és maximum tét ki van írva az asztalra. Először nézd meg ezt.</li>
+      <li>Nyereség után sokan borravalót adnak a krupiénak. Ez nem kötelező.</li>
+    </ul>
+  </article>
+  <article class="lesson" id="l-felelos"><div class="eyebrow">9. lecke</div><h2>Felelős játék</h2>
+    <p>Hibátlan alapstratégiával is a ház nyer hosszú távon: ezekkel a szabályokkal kb. <strong class="num">${fmt(edge * 100, 2)}%</strong> a tét arányában, minden körben. Rövid távon bármi kijöhet, de pénzt keresni nem lehet vele. Akkor jó, ha szórakozásnak tekinted, aminek ára van.</p>
+    <ul><li>Előre döntsd el, mennyit szánsz rá, és csak azt vidd magaddal.</li><li>Veszteséget ne próbáld visszanyerni nagyobb tétekkel.</li><li>Ha a játék már nem szórakozás, kérj segítséget, például a háziorvostól vagy egy szenvedélybetegeket segítő szolgálattól.</li></ul>
+  </article>`;
+  const btn = $('#runStyleCmp'); if (btn) btn.addEventListener('click', runStyleCmp);
+}
+async function runStyleCmp() {
+  const box = $('#styleCmp');
+  box.innerHTML = '<p class="note">Számolás…</p>';
+  const rows = [];
+  for (const st of ['basic', 'average', 'neverbust', 'mimic']) {
+    const sim = makeSim({ players: 1, seat: 1, mine: st, others: 'basic' });
+    const N = 400000;
+    for (let i = 0; i < N; i += 20000) { for (let j = 0; j < 20000; j++) sim.round(); await sleep(0); }
+    rows.push([st, sim.st.net / sim.st.rounds]);
+  }
+  const bet = 2000;
+  box.innerHTML = `<div class="tscroll"><table class="plain"><thead><tr><th>Stratégia</th><th class="r">Kezenként</th><th class="r">2000 Ft-os téttel, 100 körön</th></tr></thead><tbody>${rows.map(([s, ev]) => `<tr><td>${STYLE_NAME[s][0].toUpperCase() + STYLE_NAME[s].slice(1)}</td><td class="r">${pct(ev, 2)}</td><td class="r">${ev >= 0 ? '+' : '−'}${fmt(Math.abs(ev * bet * 100))} Ft</td></tr>`).join('')}</tbody></table></div><p class="note">Az „átlagos vendég” itt az alapstratégiát a leggyakoribb hibákkal keveri: 12-n mindig megáll 2–6 ellen, 15–16-on megáll erős osztói lap ellen, puha kezet sosem dupláz, 11-et mindig dupláz, ászokat és 8-asokat mindig feloszt.</p>`;
+}
+$$('.toc a').forEach(a => a.addEventListener('click', e => { e.preventDefault(); const t = document.getElementById(a.dataset.goto); if (t) t.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); }));
+
+/* ================= SIMULATION VIEW ================= */
+const S = { running: false, last: null };
+function syncSimForm(init) {
+  const p = +($('#sPlayers').value || prefs.players), s = Math.min(+($('#sSeat').value || prefs.seat), p);
+  fillSeatSelect($('#sPlayers'), $('#sSeat'), init ? prefs.players : p, init ? Math.min(prefs.seat, prefs.players) : s);
+}
+$('#sPlayers').addEventListener('change', () => { syncSimForm(false); renderCompare(); });
+['sBet', 'sHours', 'sMine'].forEach(id => $('#' + id).addEventListener('change', renderCompare));
+function Phi(z) { const t = 1 / (1 + 0.2316419 * Math.abs(z)); const d = 0.3989423 * Math.exp(-z * z / 2); const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; }
+function renderCompare() {
+  const bet = Math.max(100, +$('#sBet').value || 2000), H = +$('#sHours').value, np = +$('#sPlayers').value;
+  const mine = $('#sMine').value;
+  const ev = (S.last && S.last.mine === mine) ? S.last.ev : (mine === 'basic' ? EDGE : null);
+  const sd = (S.last && S.last.sd) || 1.15;
+  if (ev == null) { $('#cmpTable').innerHTML = ''; $('#cmpNote').textContent = 'Ehhez a stratégiához először futtasd le a szimulációt, abból számolom a kezenkénti értéket.'; return; }
+  $('#cmpNote').innerHTML = `Kezenkénti várható érték: <b class="num">${pct(ev, 2)}</b> (${mine === 'basic' && !(S.last && S.last.mine === mine) ? 'elméleti, alapstratégia' : 'a legutóbbi szimulációból'}), ${fmt(bet)} Ft tét, ${H} óra. A kezek száma óránként becslés élő asztalra, keveréssel együtt.`;
+  const rows = [1, 2, 3, 4, 5, 6, 7].map(n => {
+    const hands = HPH[n] * H, mean = ev * hands * bet, s = sd * Math.sqrt(hands) * bet, pAhead = 1 - Phi(-mean / s);
+    return { n, hands, mean, s, pAhead };
+  });
+  const maxLoss = Math.max(...rows.map(r => Math.abs(r.mean)));
+  $('#cmpTable').innerHTML = `<thead><tr><th>Játékos</th><th class="r">Kör / óra</th><th class="r">Várható eredmény</th><th class="r">Tipikus kilengés (±)</th><th class="r">Esély, hogy pluszban zársz</th></tr></thead><tbody>` +
+    rows.map(r => `<tr class="${r.n === np ? 'cur' : ''}"><td>${r.n}${r.n === np ? ' ◂' : ''}</td><td class="r">${HPH[r.n]}</td><td class="r"><span class="inbar"><i style="width:${Math.abs(r.mean) / maxLoss * 60}px;background:${r.mean < 0 ? 'var(--bad)' : 'var(--good)'}"></i>${r.mean >= 0 ? '+' : '−'}${fmt(Math.abs(r.mean))} Ft</span></td><td class="r">${fmt(r.s)} Ft</td><td class="r">${fmt(r.pAhead * 100, 0)}%</td></tr>`).join('') + '</tbody>';
+}
+async function runSim() {
+  if (S.running) return;
+  S.running = true; $('#sRun').disabled = true;
+  const cfg = { players: +$('#sPlayers').value, seat: +$('#sSeat').value, mine: $('#sMine').value, others: $('#sOthers').value };
+  const bet = Math.max(100, +$('#sBet').value || 2000), H = +$('#sHours').value, sessions = +$('#sSessions').value;
+  const hands = Math.round(HPH[cfg.players] * H);
+  const sim = makeSim(cfg);
+  const results = new Float64Array(sessions);
+  const t0 = performance.now(); let last = t0;
+  for (let s = 0; s < sessions; s++) {
+    let net = 0; for (let h = 0; h < hands; h++) net += sim.round();
+    results[s] = net;
+    if (performance.now() - last > 30) { $('#sProg').style.width = (s / sessions * 100) + '%'; await sleep(0); last = performance.now(); }
+  }
+  $('#sProg').style.width = '100%';
+  const st = sim.st, ev = st.net / st.rounds, sd = Math.sqrt(st.sq / st.rounds - ev * ev);
+  const se = sd / Math.sqrt(st.rounds);
+  const ahead = results.filter(x => x > 0).length / sessions, even = results.filter(x => x === 0).length / sessions;
+  const mean = results.reduce((a, b) => a + b, 0) / sessions;
+  const sorted = Array.from(results).sort((a, b) => a - b);
+  S.last = { ...cfg, ev, sd, bet, H, hands, results: sorted, mean, ahead };
+  $('#sKpis').innerHTML = `
+    <div class="kpi"><span>Átlagos eredmény / este</span><b style="color:${mean < 0 ? 'var(--bad)' : 'var(--good)'}">${mean >= 0 ? '+' : '−'}${fmt(Math.abs(mean * bet))} Ft</b><small>${hands} kör, ${H} óra</small></div>
+    <div class="kpi"><span>Pluszban zárt esték</span><b>${fmt(ahead * 100, 0)}%</b><small>${fmt(even * 100, 0)}% pont nullán</small></div>
+    <div class="kpi"><span>Kezenkénti érték</span><b>${pct(ev, 2)}</b><small>±${fmt(se * 196, 2)}% bizonytalanság · elmélet: ${pct(EDGE, 2)}</small></div>
+    <div class="kpi"><span>Legrosszabb 5% / legjobb 5%</span><b style="font-size:1.05rem">${fmt(sorted[Math.floor(sessions * 0.05)] * bet)} / +${fmt(sorted[Math.floor(sessions * 0.95)] * bet)}</b><small>Ft egy este alatt</small></div>
+    <div class="kpi"><span>Nyert / vesztett kör</span><b style="font-size:1.05rem">${fmt(st.win / st.rounds * 100, 1)}% / ${fmt(st.lose / st.rounds * 100, 1)}%</b><small>döntetlen ${fmt(st.push / st.rounds * 100, 1)}% · BJ ${fmt(st.bj / st.rounds * 100, 1)}%</small></div>`;
+  drawHist(sorted, bet);
+  renderCompare();
+  S.running = false; $('#sRun').disabled = false;
+}
+$('#sRun').addEventListener('click', runSim);
+function drawHist(sorted, bet) {
+  const n = sorted.length, lo = sorted[Math.floor(n * 0.005)], hi = sorted[Math.ceil(n * 0.995) - 1];
+  const span = Math.max(1, hi - lo);
+  let step = Math.max(1, Math.ceil(span / 28));
+  const start = Math.floor(lo / step) * step;
+  const bins = [];
+  for (let x = start; x <= hi; x += step) bins.push({ x0: x, x1: x + step, c: 0 });
+  for (const v of sorted) { if (v < start || v >= start + bins.length * step) continue; bins[Math.floor((v - start) / step)].c++; }
+  const W = 640, Hh = 240, ml = 44, mr = 12, mt = 12, mb = 34;
+  const maxC = Math.max(...bins.map(b => b.c));
+  const xs = v => ml + (v - start) / (bins.length * step) * (W - ml - mr);
+  const ys = c => mt + (1 - c / maxC) * (Hh - mt - mb);
+  const bw = (W - ml - mr) / bins.length;
+  let svg = `<svg class="hist" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Az esték eredményének eloszlása">`;
+  for (let i = 0; i <= 4; i++) { const c = maxC * i / 4, y = ys(c); svg += `<line class="grid" x1="${ml}" x2="${W - mr}" y1="${y}" y2="${y}"/><text x="${ml - 6}" y="${y + 4}" text-anchor="end">${fmt(c / n * 100, 0)}%</text>`; }
+  bins.forEach((b, i) => {
+    const x = ml + i * bw, y = ys(b.c), h = Hh - mb - y;
+    const neg = b.x1 <= 0, pos = b.x0 > 0;
+    const fill = neg ? 'var(--bad)' : pos ? 'var(--good)' : 'var(--push)';
+    if (b.c > 0) svg += `<path d="M${x + 1},${Hh - mb} V${y + Math.min(4, h)} Q${x + 1},${y} ${x + 5},${y} H${x + bw - 5} Q${x + bw - 1},${y} ${x + bw - 1},${y + Math.min(4, h)} V${Hh - mb} Z" fill="${fill}" fill-opacity=".85"/>`;
+    svg += `<rect x="${x}" y="${mt}" width="${bw}" height="${Hh - mt - mb}" fill="transparent" data-tip="${b.x0 * bet >= 0 ? '+' : ''}${fmt(b.x0 * bet)} … ${b.x1 * bet >= 0 ? '+' : ''}${fmt(b.x1 * bet)} Ft: ${fmt(b.c / n * 100, 1)}% az estékből"/>`;
+  });
+  svg += `<line class="axis" x1="${ml}" x2="${W - mr}" y1="${Hh - mb}" y2="${Hh - mb}"/>`;
+  // zero line
+  if (0 >= start && 0 <= start + bins.length * step) { const x0 = xs(0); svg += `<line x1="${x0}" x2="${x0}" y1="${mt}" y2="${Hh - mb}" stroke="var(--pearl)" stroke-dasharray="3 3" stroke-width="1.2"/><text x="${x0 + 4}" y="${mt + 10}" style="fill:var(--pearl)">0</text>`; }
+  // ticks
+  const tickN = 5;
+  for (let i = 0; i <= tickN; i++) { const v = start + bins.length * step * i / tickN; svg += `<text x="${xs(v)}" y="${Hh - mb + 16}" text-anchor="middle">${v * bet >= 0 ? '+' : ''}${fmt(Math.round(v * bet / 1000))}e</text>`; }
+  svg += `<text x="${(W + ml) / 2}" y="${Hh - 4}" text-anchor="middle">egy este eredménye (ezer Ft)</text></svg>`;
+  $('#histWrap').innerHTML = svg;
+  $('#histTitle').textContent = `${n} este eredménye`;
+  $('#histNote').innerHTML = `Minden oszlop azt mutatja, az esték hány százaléka végződött abban a sávban. <span style="color:var(--good)">Zöld</span>: nyereség, <span style="color:var(--bad)">piros</span>: veszteség.`;
+}
+const tip = $('#tip');
+document.addEventListener('mousemove', e => { const t = e.target.closest && e.target.closest('[data-tip]'); if (!t) { tip.hidden = true; return; } tip.textContent = t.dataset.tip; tip.hidden = false; tip.style.left = Math.min(e.clientX + 12, innerWidth - tip.offsetWidth - 8) + 'px'; tip.style.top = (e.clientY - 34) + 'px'; });
+
+/* ================= SETTINGS VIEW ================= */
+function syncSettings() {
+  $('#rDbl').value = rules.dbl; $('#rDas').checked = rules.das; $('#rH17').value = rules.h17 ? 'h17' : 's17'; $('#rDbj').value = rules.dbj; $('#rBj').value = String(rules.bjPay); $('#rMax').value = String(rules.maxHands);
+  $('#pCoach').value = prefs.coach; $('#pSpeed').value = prefs.speed; $('#pBank').value = prefs.bankroll;
+  $('#edgeNow').textContent = pct(EDGE, 2) + ' / kör';
+  $('#edgeNote').textContent = `Ennyi a játékos várható eredménye körönként, hibátlan alapstratégiával. Példa: 100 kör 2000 Ft-os téttel várhatóan ${EDGE < 0 ? '−' : '+'}${fmt(Math.abs(EDGE * 2000 * 100))} Ft.`;
+}
+['rDbl', 'rDas', 'rH17', 'rDbj', 'rBj', 'rMax'].forEach(id => $('#' + id).addEventListener('change', () => {
+  if (G.phase !== 'bet') { toast('Várd meg a kör végét.'); syncSettings(); return; }
+  rules.dbl = $('#rDbl').value; rules.das = $('#rDas').checked; rules.h17 = $('#rH17').value === 'h17'; rules.dbj = $('#rDbj').value; rules.bjPay = +$('#rBj').value; rules.maxHands = +$('#rMax').value;
+  saveRules(); rebuild(); S.last = null; syncSettings(); renderAll(); toast('Szabályok frissítve, a táblázat is.');
+}));
+['pCoach', 'pSpeed'].forEach(id => $('#' + id).addEventListener('change', () => { prefs.coach = $('#pCoach').value; prefs.speed = $('#pSpeed').value; savePrefs(); }));
+$('#pBank').addEventListener('change', () => { prefs.bankroll = Math.max(100, +$('#pBank').value || 1000); savePrefs(); });
+$('#resetChips').addEventListener('click', () => { if (G.phase !== 'bet') return toast('Várd meg a kör végét.'); G.balance = prefs.bankroll; G.bet = 10; saveGame(); renderGame(); toast(`Zseton visszaállítva: ${fmt(prefs.bankroll)}`); });
+$('#resetStats').addEventListener('click', () => { G.stats = { hands: 0, dec: 0, ok: 0, net: 0 }; G.mistakes = []; D.stats = { n: 0, ok: 0, streak: 0, bestStreak: 0 }; D.mine = {}; store.set('dstats', D.stats); store.set('dmine', {}); saveGame(); renderGame(); toast('Statisztika törölve.'); });
+
+/* ================= ROUTER & KEYS ================= */
+const VIEWS = ['jatek', 'gyakorlas', 'tablazat', 'tanulas', 'szimulacio', 'beallitasok'];
+let curView = 'jatek';
+function route() {
+  const h = (location.hash || '').replace('#', '');
+  curView = VIEWS.includes(h) ? h : 'jatek';
+  VIEWS.forEach(v => $('#v-' + v).hidden = v !== curView);
+  $$('nav.tabs a').forEach(a => a.toggleAttribute('aria-current', false));
+  const a = $(`nav.tabs a[data-view="${curView}"]`); if (a) { a.setAttribute('aria-current', 'page'); a.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+  if (curView === 'gyakorlas' && !D.cur) nextDrill();
+  window.scrollTo(0, 0);
+}
+window.addEventListener('hashchange', route);
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input, select, textarea')) return;
+  const k = e.key.toLowerCase();
+  if (curView === 'jatek') {
+    if (G.phase === 'bet' && (k === 'enter' || k === ' ')) { e.preventDefault(); deal(); }
+    else if (G.phase === 'play' && G.pending && !G.coach && 'hsdp'.includes(k) && k.length === 1) { const b = $(`#controls [data-act="${k.toUpperCase()}"]`); if (b && !b.disabled) resolvePending(k.toUpperCase()); }
+  } else if (curView === 'gyakorlas') {
+    if (!D.answered && 'hsdp'.includes(k) && k.length === 1) answerDrill(k.toUpperCase());
+    else if (D.answered && (k === 'enter' || k === ' ')) { e.preventDefault(); nextDrill(); }
+  }
+});
+
+function renderAll() { renderGame(); renderChart(); renderLessons(); renderCompare(); if (D.cur) { D.cur = null; if (curView === 'gyakorlas') nextDrill(); } }
+if (prefs.newbieHidden) $('#newbieBox').hidden = true;
+syncTableForm(); syncSimForm(true); syncSettings();
+setupSeats();
+renderAll();
+$('#sKpis').innerHTML = `<div class="kpi"><span>Elméleti érték / kör</span><b>${pct(EDGE, 2)}</b><small>alapstratégiával, ezekkel a szabályokkal</small></div><div class="kpi"><span>Szimuláció</span><b style="font-size:1rem">Még nem futott</b><small>Állítsd be az asztalt, és nyomd meg a Lejátszás gombot.</small></div>`;
+$('#histWrap').innerHTML = '<p class="muted" style="margin:0">Itt jelenik meg, hány este végződött nyereséggel és hány veszteséggel.</p>';
+route();
+// Teszteléshez
+window.__AK = { E, get EDGE() { return EDGE; }, makeSim };
+})();
+</script>
+
+</body></html>
